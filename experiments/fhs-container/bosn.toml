@@ -1,0 +1,57 @@
+# One stack per FHS mode. Each mode is its own image, activated at build time
+# (activate.sh), like a NixOS generation; corpus.sh only reads system paths.
+# Tasks can therefore rerun in their stack's persistent container safely.
+#
+#   bosn run --task baseline | stock | base | desktop
+#
+# Downloads and toolchains persist in the machine-scoped `cache` volume, which
+# every stack shares.
+
+[stack.baseline]
+dockerfile = "docker/baseline.Dockerfile"
+family = "nix"
+default = true
+[stack.baseline.mounts]
+exp = { source = ".", destination = "/exp", readonly = true }
+[stack.baseline.volumes]
+cache = { scope = "machine", destination = "/cache" }
+
+[stack.stock]
+dockerfile = "docker/stock.Dockerfile"
+family = "nix"
+[stack.stock.mounts]
+exp = { source = ".", destination = "/exp", readonly = true }
+[stack.stock.volumes]
+cache = { scope = "machine", destination = "/cache" }
+
+[stack.base]
+dockerfile = "docker/base.Dockerfile"
+family = "nix"
+[stack.base.mounts]
+exp = { source = ".", destination = "/exp", readonly = true }
+[stack.base.volumes]
+cache = { scope = "machine", destination = "/cache" }
+
+[stack.desktop]
+dockerfile = "docker/desktop.Dockerfile"
+family = "nix"
+[stack.desktop.mounts]
+exp = { source = ".", destination = "/exp", readonly = true }
+[stack.desktop.volumes]
+cache = { scope = "machine", destination = "/cache" }
+
+[task.baseline]
+stack = "baseline"
+cmd = "MODE=baseline bash /exp/corpus.sh"
+
+[task.stock]
+stack = "stock"
+cmd = "MODE=stock bash /exp/corpus.sh"
+
+[task.base]
+stack = "base"
+cmd = "MODE=base bash /exp/corpus.sh"
+
+[task.desktop]
+stack = "desktop"
+cmd = "MODE=desktop bash /exp/corpus.sh"

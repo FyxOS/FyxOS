@@ -1,0 +1,10 @@
+#!/bin/sh
+# Emulates envfs: /bin/NAME and /usr/bin/NAME run the NAME on the caller's PATH.
+name=${0##*/}
+IFS=:
+for dir in $PATH; do
+  case $dir in /bin | /usr/bin | "") continue ;; esac
+  [ -x "$dir/$name" ] && exec "$dir/$name" "$@"
+done
+echo "envfs: $name is not on PATH" >&2
+exit 127

@@ -10,7 +10,8 @@ These are hard rules. A change that breaks one is rejected, however useful it is
 1. **No compute budget.** Installing FyxOS or any listed flavor compiles nothing
    locally. Two exceptions are allowed:
    - trivial derivations: symlink trees and text files;
-   - unfree drivers (NVIDIA), which `cache.nixos.org` does not carry **[verify]**.
+   - unfree packages (the NVIDIA driver, VS Code), which `cache.nixos.org` does not
+     carry (checked at nixos-unstable `c59305b`).
 2. **Hosting only for installer ISOs.** FyxOS publishes ISOs on GitHub Releases and
    nothing else. It has no binary cache, channel, or website.
 3. **A minimal base.** The base provides FHS compatibility and nothing else. Desktops
@@ -58,11 +59,14 @@ hands off to the real glibc loader with the declared library path. The base enab
 and sets its libraries (§4.2). FyxOS never builds a loader of its own, because that
 would mean compiling glibc (rule 1).
 
-Setting `programs.nix-ld.libraries` *replaces* the module's defaults; it does not add to
-them. The base therefore restates those defaults explicitly.
+Setting `programs.nix-ld.libraries` *adds to* the module's defaults. The module
+sets them in `config`, so the lists merge, and the base does not restate them
+(confirmed by the [container experiment](../experiments/fhs-container/)).
 
-**[verify]** Check that nix-ld finds the library set when `NIX_LD_LIBRARY_PATH` is
-unset: systemd services, cron, and `ssh host cmd`.
+nix-ld 2.0.6 has the library path compiled in
+(`/run/current-system/sw/share/nix-ld/lib`). Processes that have no
+`NIX_LD_LIBRARY_PATH` therefore still work: systemd services, cron, and
+`ssh host cmd`. The experiment runs its whole corpus without the variables.
 
 ### 4.2 Libraries
 
@@ -89,11 +93,25 @@ The same library tree is exposed at the standard paths, through `/run/current-sy
 that rollbacks just work:
 
 ```
-/usr/lib -> /run/current-system/sw/share/nix-ld/lib     [verify exact path]
+/usr/lib -> /run/current-system/sw/share/nix-ld/lib
 /lib     -> /usr/lib
 ```
 
-### 4.3 Executables: envfs
+### 4.3 `ldconfig` and `ld.so.cache`
+
+Foreign code also discovers libraries by asking `ldconfig`. Python's
+`ctypes.util.find_library` runs `/sbin/ldconfig -p`, and returned nothing in
+every configuration until this was added. nixpkgs' `ldconfig` reads its cache
+from its own store path unless it is given `-C`. Activation therefore:
+
+- installs `/sbin/ldconfig`, a two-line wrapper that runs the glibc `ldconfig`
+  with `-C /etc/ld.so.cache`;
+- regenerates `/etc/ld.so.cache` from `/usr/lib` on every switch.
+
+Both are text and a cache file, so no compute is needed (rule 1). The cache only
+answers queries; the loaders never read it (§4.1).
+
+### 4.4 Executables: envfs
 
 `services.envfs.enable` mounts `/bin` and `/usr/bin` as a filesystem that resolves any
 name on `PATH`. That makes `#!/usr/bin/python3`, `/bin/true` and `/bin/bash` work.
@@ -102,7 +120,7 @@ An earlier draft preferred a declared list of symlinks for predictability. Real 
 showed such lists go stale, while envfs fixed failures in test suites that hard-code
 `/bin/*`. envfs invents nothing: only names already on `PATH` resolve.
 
-### 4.4 Known gap: binaries that use the store loader
+### 4.5 Known gap: binaries that use the store loader
 
 Some binaries have a `/nix/store` glibc as their interpreter rather than
 `/lib64/ld-linux…`. They never pass through nix-ld, and the store loader does not
@@ -115,7 +133,7 @@ search `/usr/lib`. Examples:
 The base does not solve this case. Flavors may add targeted workarounds, but the gap is
 documented rather than hidden.
 
-### 4.5 Diagnostics note
+### 4.6 Diagnostics note
 
 **Do not diagnose with `ldd`.** It calls the loader directly, bypasses the nix-ld shim,
 and reports working foreign binaries as missing libraries. Run the binary itself, or
@@ -232,12 +250,6 @@ their images.
 
 ## 9. Open questions
 
-1. nix-ld's library directory path, and whether `/usr/lib` can point to it directly
-   (§4.2).
-2. nix-ld without `NIX_LD_LIBRARY_PATH` set (§4.1).
-3. Whether NixOS activation conflicts with the `/usr/lib` and `/lib` links, and whether
+1. Whether NixOS activation conflicts with the `/usr/lib` and `/lib` links, and whether
    envfs replacing `/usr/bin/env` and `/bin/sh` is safe on every flavor.
-4. Whether unfree packages are absent from `cache.nixos.org` (rule 1 exception).
-5. Whether unstable's `production` NVIDIA driver is still a 595.x release. 610.x has
-   suspend regressions.
-6. aarch64: map the paths to `/lib/ld-linux-aarch64.so.1`.
+2. aarch64: map the paths to `/lib/ld-linux-aarch64.so.1`.

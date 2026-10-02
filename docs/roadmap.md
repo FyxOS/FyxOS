@@ -17,6 +17,12 @@ in the [design](design.md). Then run this corpus of foreign binaries unmodified:
 
 **Exit:** the corpus runs, and the closure has nothing to build.
 
+Progress: the container half is done in
+[`experiments/fhs-container`](../experiments/fhs-container/). Everything except
+the store-loader gap passes on the base and desktop modes. What remains needs a
+booted NixOS VM: real envfs (FUSE) and activation of the `/usr/lib` and `/lib`
+links.
+
 ## Phase 1: the base
 
 - `flake.nix` with `nixosModules.default`.
