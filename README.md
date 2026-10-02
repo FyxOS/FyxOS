@@ -1,7 +1,6 @@
 # FyxOS
 
-**A Nix-based Linux distribution with a standard FHS library layout that still uses the
-official NixOS binary cache.**
+**NixOS, plus the standard Linux library layout. Nothing else.**
 
 On NixOS, a binary built for "Linux" usually fails to start:
 
@@ -10,72 +9,67 @@ $ ./some-vendor-tool
 bash: ./some-vendor-tool: cannot execute: required file not found
 ```
 
-The cause is the missing `/lib64/ld-linux-x86-64.so.2`, `/usr/lib`, and `/usr/bin/python3`.
-Every other mainstream distribution has them, and prebuilt software expects them. This
-includes manylinux wheels, npm and Cargo prebuilt binaries, rustup toolchains, VS Code
-Server, JetBrains IDEs, AppImages, game launchers, and vendor SDKs.
+It needs `/lib64/ld-linux-x86-64.so.2`, `/usr/lib`, and `/usr/bin/python3`, which every
+other distribution has. Many kinds of prebuilt software assume those paths:
 
-FyxOS keeps everything that makes NixOS good: declarative configuration, atomic
-upgrades, rollbacks, and reproducible builds. It adds the standard layout as a
-first-class, always-on part of the system:
+- manylinux wheels
+- npm and Cargo prebuilt binaries
+- rustup
+- VS Code Server
+- JetBrains IDEs
+- AppImages
+- vendor SDKs
 
-```console
-$ ls -l /lib64/ld-linux-x86-64.so.2 /usr/lib/libz.so.1 /usr/bin/env
-$ ./some-vendor-tool      # just runs
-$ pip install numpy && python -c 'import numpy'   # manylinux wheel, just works
+FyxOS adds those paths, so such binaries run unmodified.
+
+## Small on purpose
+
+FyxOS is a **single NixOS module**, imported from a flake. It is not a fork:
+
+- **No packages of its own.** Everything comes from your nixpkgs and
+  `cache.nixos.org`. FyxOS builds nothing heavier than a symlink tree.
+- **No infrastructure.** It has no binary cache, no installer image, and no channel.
+  Install with the official NixOS ISO, then import FyxOS.
+- **Reuses what nixpkgs already ships.** The loader is
+  [nix-ld](https://github.com/nix-community/nix-ld). FyxOS's job is to turn it on by
+  default and give it the standard paths.
+
+```nix
+{
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.fyxos.url = "github:FyxOS/FyxOS";
+  inputs.fyxos.inputs.nixpkgs.follows = "nixpkgs";
+
+  outputs = { nixpkgs, fyxos, ... }: {
+    nixosConfigurations.laptop = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [ ./configuration.nix fyxos.nixosModules.default ];
+    };
+  };
+}
 ```
 
-## How it works, in one paragraph
+## What it adds
 
-FyxOS **adds** an FHS view of the system and **never relocates** the Nix store.
-Every package still lives in `/nix/store`, built by unmodified nixpkgs, so its store path
-is identical to what `cache.nixos.org` already holds, and installs download prebuilt
-binaries. On top of that store, each system generation builds a read-only FHS root:
-`/usr/lib`, `/usr/bin`, `/lib64/ld-linux-x86-64.so.2`, and `/etc/ld.so.cache`. Its
-contents are a declared, versioned set of libraries and tools. It is switched and rolled
-back atomically with the rest of the generation. Nix builds stay sandboxed and cannot
-see the FHS root, so Nix's purity guarantees are unchanged. Only foreign binaries at
-runtime use it.
+| Path | Provided by |
+|---|---|
+| `/lib64/ld-linux-x86-64.so.2` | nix-ld's loader shim (from nixpkgs) |
+| `/usr/lib`, `/lib` | Symlink to the current generation's library set |
+| `/usr/bin/bash`, `/bin/bash`, `/usr/bin/python3`, … | Symlinks to declared interpreters |
 
-## Goals
-
-- **Foreign binaries run unmodified.** No `patchelf`, no `nix-ld` environment
-  variables, no per-app FHS sandbox.
-- **`cache.nixos.org` keeps working.** FyxOS tracks NixOS channel revisions of nixpkgs and
-  never overrides a package in a way that would change its store path. Its own cache
-  holds only the small FHS glue derivations.
-- **Still declarative and rollback-safe.** The FHS root is part of the system closure.
-  `fyxos-rebuild switch --rollback` restores `/usr` along with everything else.
-- **No new impurity for Nix builds.** The build sandbox has no `/usr`, so a derivation
-  cannot silently depend on the FHS root.
-
-## Non-goals
-
-- Rebuilding nixpkgs with an FHS prefix. Store paths are baked into every package hash,
-  so a different prefix would discard the binary cache entirely.
-- Replacing Nix, nixpkgs, or the NixOS module system. FyxOS is a distribution layer on
-  top of them, not a fork of nixpkgs.
-- Mutable `/usr`. You cannot `make install` into `/usr`. Use `/usr/local` or `/opt` as on
-  any other distribution.
+Everything points through `/run/current-system`, so switching generations and rolling
+back already work, with no extra machinery.
 
 ## Status
 
-**Design phase.** Nothing is installable yet. The design and the first validation spike
-are described in the documentation below.
+**Design phase.** See [design](docs/design.md), [prior art](docs/prior-art.md), and
+[roadmap](docs/roadmap.md).
 
-## Documentation
-
-- [Design](docs/design.md): architecture, the FHS root, the loader, cache strategy,
-  configuration, and open questions.
-- [Prior art](docs/prior-art.md): `nix-ld`, `envfs`, `nixos-fhs-compat`, `buildFHSEnv`,
-  Guix `--emulate-fhs`, and why none of them is a complete answer.
-- [Roadmap](docs/roadmap.md): phased plan, from a NixOS module to an installable
-  distribution.
+Desktop opinions do not belong here. They live in separate projects such as
+[Autarchy](https://github.com/FyxOS/Autarchy).
 
 ## Relationship to NixOS
 
-FyxOS is an independent project and is not affiliated with or endorsed by the NixOS
-Foundation. It depends on nixpkgs, the NixOS module system, and the public
-`cache.nixos.org` binary cache, and is grateful to everyone who builds and maintains
-them. FyxOS aims to be a good citizen of that ecosystem. Its core FHS module is designed
-to work on plain NixOS too, and improvements that belong upstream should go upstream.
+FyxOS is independent and not affiliated with or endorsed by the NixOS Foundation. It
+depends entirely on nixpkgs, NixOS, and the public `cache.nixos.org`, and anything
+useful in it should go upstream.

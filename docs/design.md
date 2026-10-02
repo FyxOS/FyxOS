@@ -1,251 +1,124 @@
 # FyxOS design
 
-Status: draft. This document describes the intended architecture. Anything marked
-**[verify]** is an assumption the Phase 0 spike (see [roadmap](roadmap.md)) must confirm
-before it is built on.
+Status: draft. Items marked **[verify]** are assumptions that Phase 0 of the
+[roadmap](roadmap.md) must confirm.
 
-## 1. Problem
+## 1. Constraints
 
-NixOS installs every package under a content-addressed prefix in `/nix/store/<hash>-name`.
-Package binaries find their dependencies through absolute store paths embedded at
-build time: the ELF interpreter, `RUNPATH`, and shebangs. The result is excellent
-reproducibility and side-by-side versions, at a cost: the well-known paths other
-distributions provide do not exist.
+These are hard rules. A change that breaks one is rejected, however useful it is.
 
-| Path a foreign binary expects | Present on NixOS? |
+1. **Zero compute budget.** FyxOS adds no derivation that cannot be fetched from
+   `cache.nixos.org`, except trivial local ones: symlink trees and text files that build
+   in seconds.
+2. **Zero hosting budget.** It has no binary cache, ISO, channel, or website. The GitHub
+   repository is the only thing FyxOS publishes.
+3. **Minimal surface.** FyxOS makes NixOS FHS-compatible and does nothing else.
+   Desktops, defaults, and opinions live in other projects.
+4. **Never change nixpkgs.** There are no overlays and no patched packages. Changing a
+   package would change store paths, lose the cache, and violate rule 1.
+
+## 2. Problem
+
+Foreign binaries expect the following paths. NixOS does not provide them.
+
+| Path | Used for |
 |---|---|
-| `/lib64/ld-linux-x86-64.so.2` (ELF interpreter) | No, or a stub that prints an error |
-| `/usr/lib`, `/lib` (library search path) | No |
-| `/etc/ld.so.cache` honoured by the loader | No |
-| `/usr/bin/python3`, `/usr/bin/perl`, `/bin/bash` (shebangs) | No (`/bin/sh` and `/usr/bin/env` only) |
+| `/lib64/ld-linux-x86-64.so.2` | ELF interpreter (`PT_INTERP`) |
+| `/usr/lib`, `/lib` | Libraries the binary links against |
+| `/usr/bin/python3`, `/bin/bash`, … | Shebangs and hard-coded tool paths |
 
-Software distributed as prebuilt binaries targets exactly those paths. That includes
-manylinux wheels, Node native modules, rustup, Go and Cargo release binaries, VS Code
-Server, JetBrains IDEs, AppImages, Steam, and vendor SDKs. On NixOS each of them needs
-a workaround: patching, wrapping, or a sandbox per application.
+NixOS ships only `/bin/sh` and `/usr/bin/env`.
 
-## 2. Principle: add, never relocate
+## 3. Design: add, never relocate
 
-The binary cache is the constraint everything else bends around. A store path's hash
-covers its full build recipe, including the store prefix and every dependency's path.
-Any change to a widely used package (glibc, gcc, the prefix) changes the hash of
-everything above it and turns `cache.nixos.org` into a cache miss.
+`/nix/store` is untouched, so every store path matches `cache.nixos.org`. FyxOS adds
+the three missing pieces as thin layers over the current system generation.
 
-So FyxOS never changes how nixpkgs packages are built. Instead:
+### 3.1 Loader: nix-ld
 
-1. **The Nix world is untouched.** `/nix/store` holds unmodified nixpkgs outputs. Native
-   packages keep their store interpreters and RUNPATHs and never look at `/usr`.
-2. **The FHS world is a view.** Each system generation builds an FHS root out of store
-   paths that already exist. It is made of symlinks, a loader, and a generated
-   `ld.so.cache`. It is exposed at the standard locations.
-3. **Only foreign binaries use the view.** The two worlds share the store. They do not
-   share a loader configuration.
+nixpkgs already ships nix-ld and a NixOS module (`programs.nix-ld`). The module installs
+a shim at `/lib64/ld-linux-x86-64.so.2`. The shim finds the real glibc loader and a
+library path, then hands off to them. FyxOS:
 
-## 3. Architecture
+- enables `programs.nix-ld` by default;
+- sets `programs.nix-ld.libraries` from `fyx.fhs.libraries` (§3.2).
+
+It does not build its own loader. A glibc built with standard search paths would mean
+compiling and hosting glibc, which violates constraints 1 and 2.
+
+nix-ld finds its library path through `NIX_LD_LIBRARY_PATH`. Only the shim reads that
+variable. The normal glibc loader ignores it, so native nixpkgs binaries are unaffected.
+**[verify]** That processes outside a login session still find the default library set
+without the variable: systemd services, cron, and `ssh host cmd`. If they do not, FyxOS
+sets the variable through `environment.sessionVariables` plus a systemd
+`DefaultEnvironment`.
+
+### 3.2 Libraries: `/usr/lib` and `/lib`
+
+`programs.nix-ld.libraries` becomes a symlink tree in the system profile. FyxOS exposes
+the same tree at the standard paths:
 
 ```
-            ┌─────────────────────────── system generation N ────────────────────────────┐
-            │                                                                             │
- nixpkgs ──►│  toplevel  ──┬─► NixOS modules (systemd, etc, services …)                    │
- (channel   │              │                                                              │
-  revision, │              └─► fhs-root  ──► /usr/lib/*.so*   (symlinks into /nix/store)   │
-  unpatched)│                             ├─► /usr/bin/*        (declared tools)            │
-            │                             ├─► /usr/share/…      (certs, fonts, locales)     │
-            │                             ├─► fhs-ld            (FHS loader, see §5)        │
-            │                             └─► ld.so.cache       (generated by ldconfig)     │
-            └─────────────────────────────────────────────────────────────────────────────┘
-                                     │ activation
-                                     ▼
-   /usr  ─► /run/current-system/fhs/usr          (read-only)
-   /lib  ─► usr/lib      /lib64 ─► usr/lib       /bin ─► usr/bin      /sbin ─► usr/bin
-   /lib64/ld-linux-x86-64.so.2  ─► fhs-ld
-   /etc/ld.so.cache             ─► generated cache for fhs-ld
+/usr/lib -> /run/current-system/sw/share/nix-ld/lib     [verify exact path]
+/lib     -> /usr/lib
 ```
 
-The layout is **merged-usr**, as on Fedora, Arch, and Debian 12+. `/lib`, `/lib64`, `/bin`,
-and `/sbin` point into `/usr`, so there is exactly one place to look.
+The links are created with `systemd.tmpfiles` rules. They point through
+`/run/current-system`, so a generation switch or rollback changes the target with no
+FyxOS code involved.
 
-### 3.1 The FHS root derivation
+`fyx.fhs.libraries` defaults to a short list. It covers command-line binaries and
+manylinux wheels: glibc, libstdc++, libgcc_s, zlib, zstd, xz, bzip2, openssl, libffi,
+ncurses, libuuid, curl, and icu. GUI libraries are opt-in through
+`fyx.fhs.extraLibraries`. Projects like Autarchy add them.
 
-`fhs-root` is an ordinary derivation, built like `buildEnv`, from a declared package set:
+### 3.3 Interpreters: `/usr/bin`, `/bin`
 
-- **Libraries:** the union of the `lib/` outputs of `fyx.fhs.libraries`, linked flat
-  into `usr/lib`. A collision between two packages providing the same soname is an
-  evaluation error, not a silent "last one wins".
-- **Executables:** `fyx.fhs.binaries`, linked into `usr/bin`. This is how
-  `#!/usr/bin/python3` and `#!/bin/bash` resolve.
-- **Data:** `usr/share/zoneinfo`, `usr/share/fonts`, `usr/share/ca-certificates`,
-  `usr/lib/locale`, the paths that foreign binaries hard-code beyond libraries.
-- **Loader:** `fhs-ld`, described in §5.
-- **Cache:** `etc/ld.so.cache`, produced by running `ldconfig -r` over the root at build
-  time, so it is part of the closure rather than mutable state.
+FyxOS creates these links with `systemd.tmpfiles`:
 
-Because it is a derivation of existing store paths, building it costs a few seconds of
-symlinking. Nothing is compiled except `fhs-ld`, which comes from the FyxOS cache.
+- `/bin/bash`, `/usr/bin/bash` → bash in the system profile;
+- one `/usr/bin/<name>` for each interpreter in `fyx.fhs.binaries`, which is empty by
+  default. Declaring `python3` gives you `/usr/bin/python3`.
 
-### 3.2 Default package set
+FyxOS deliberately does not use envfs. The path a binary resolves to would depend on
+the caller's `PATH`. Declared links are predictable.
 
-The default set is a compatibility target, not a taste choice. FyxOS ships named
-profiles that stack:
+## 4. Purity
 
-| Profile | Purpose | Contents (indicative) |
-|---|---|---|
-| `base` | Command-line binaries | glibc, libstdc++, libgcc_s, zlib, zstd, xz, bzip2, openssl, libffi, ncurses, readline, libuuid, krb5, curl, icu |
-| `manylinux` | Python wheels and Node modules | the PEP 600 / manylinux whitelisted libraries |
-| `desktop` | GUI apps, Electron, JetBrains | X11 and xcb libs, wayland, libxkbcommon, gtk3, nss, nspr, alsa, pulse/pipewire client, fontconfig, freetype, dbus, libdrm, mesa (GL/EGL/Vulkan loader) |
-| `gaming` | Steam, Proton, older games | `desktop` plus 32-bit (`i686`) multilib in `/usr/lib32` with `/lib/ld-linux.so.2` |
+The usual objection to an FHS layout on NixOS is that global paths hide undeclared
+dependencies. That objection does not apply here:
 
-`base` and `manylinux` are on by default. `desktop` is on when a graphical session is
-configured.
+- **Nix builds cannot see `/usr/lib`.** The build sandbox has no `/usr`, so derivations
+  stay pure.
+- **Native binaries do not use nix-ld.** Their interpreter is a store path. Only binaries
+  that ask for `/lib64/ld-linux…` go through the shim.
+- **The library set is declared.** The same configuration gives the same `/usr/lib`.
 
-### 3.3 Interpreters
+## 5. What FyxOS is
 
-`/usr/bin/env`, `/bin/sh`, and `/bin/bash` are always present. `python3`, `perl`, and `node`
-appear in `/usr/bin` only if the user declares them, through `fyx.fhs.binaries` or the
-profile. FyxOS prefers a clear "command not found" over shipping an interpreter
-nobody chose.
+When Phase 1 is done, FyxOS should be:
 
-## 4. Purity and the "hidden dependency" objection
+- `flake.nix` exposing `nixosModules.default`;
+- one module of roughly a hundred lines that sets nix-ld options, declares the
+  tmpfiles rules, and defines `fyx.fhs.{libraries,extraLibraries,binaries}`;
+- a NixOS VM test (`nixosTests`-style) that runs a few foreign binaries. It runs locally
+  or on free CI for public repositories. No hosted runners are paid for.
 
-The standard argument against an FHS NixOS is that global paths let software depend on
-things it never declared. FyxOS contains the risk:
+## 6. Out of scope
 
-- **Nix builds cannot see the FHS root.** The build sandbox mounts only the declared
-  closure. There is no `/usr` inside it, exactly as on NixOS, so a derivation that
-  accidentally relies on `/usr/lib` fails to build. It does not "work on my machine".
-- **Native packages do not use the FHS loader.** Their ELF interpreter is the store
-  glibc's loader, whose search path is the store, not `/usr/lib` **[verify]**. Installing
-  a library into the FHS root therefore cannot change how any nixpkgs package resolves
-  its libraries.
-- **The FHS root is declared and versioned.** It is not a pile of whatever was installed
-  last. Two machines with the same configuration have byte-identical FHS roots.
+| Idea | Why not |
+|---|---|
+| A custom glibc or loader with standard search paths | Needs compute and a cache (constraints 1 and 2) |
+| An FHS-prefix rebuild of nixpkgs | Loses the cache entirely |
+| An installer ISO or channels | Hosting (constraint 2). Use the NixOS ISO |
+| i686 multilib, Steam profiles, desktop library sets | Belong in downstream modules |
+| A `fyx why` diagnostics tool | Nice to have later, not needed for compatibility |
 
-Foreign binaries do get an implicit environment. That is precisely the point, and it is
-the same contract every other distribution offers them.
+## 7. Open questions
 
-## 5. The loader
-
-This is the technically delicate part.
-
-**Problem.** nixpkgs' glibc is patched so its `ld.so` does not consult the system
-`/etc/ld.so.cache` and its built-in default search directories point into its own store
-prefix rather than `/lib` and `/usr/lib` **[verify]**. Symlinking it to
-`/lib64/ld-linux-x86-64.so.2` would start foreign binaries, but they would not find
-libraries in `/usr/lib`. Current tools work around this with `NIX_LD_LIBRARY_PATH`
-(nix-ld) or `LD_LIBRARY_PATH` (wrappers). Those environment variables leak into child
-processes and break native ones.
-
-**Design.** FyxOS builds **`fhs-ld`**: a glibc built from the *same source and version* as
-the nixpkgs glibc in the pinned channel, configured with standard FHS search behaviour.
-It reads `/etc/ld.so.cache` and defaults to `/lib64:/usr/lib`. Only the loader and
-`libc.so.6` family of this build go into the FHS root. Guix took the same approach for
-`guix shell --emulate-fhs`.
-
-Invariants:
-
-1. **One glibc version per generation.** `fhs-ld` must match the nixpkgs glibc version
-   exactly. A CI check fails the build otherwise. Mixing glibc versions in one process is
-   undefined behaviour.
-2. **Store libraries are safe to load.** A library in `/usr/lib` is a nixpkgs build whose
-   `RUNPATH` points to the store glibc. When a foreign binary loads it, `libc.so.6` is
-   already resolved by soname, so no second libc is mapped. This is the same mechanism
-   nix-ld relies on today. **[verify]** that no nixpkgs library in the default profiles
-   pins a store `ld-linux` path in a way that breaks this.
-3. **No environment variables.** Nothing in FyxOS sets `LD_LIBRARY_PATH`, `NIX_LD`, or
-   `NIX_LD_LIBRARY_PATH` globally. Children of foreign processes behave like children
-   of native ones.
-
-**Fallback.** If building `fhs-ld` against the nixpkgs glibc source proves fragile, the
-fallback is nix-ld's shim, configured from a generated file rather than environment
-variables. That loses `ld.so.cache` semantics but keeps everything else.
-
-## 6. Binary cache strategy
-
-| Source | Contents | Expected share of a desktop closure |
-|---|---|---|
-| `cache.nixos.org` | All nixpkgs outputs | ≥ 99% |
-| `cache.fyxos.org` | `fhs-ld`, FyxOS tools, FHS root builds for published profiles | < 1%, small |
-
-Rules that keep it that way:
-
-- **Pin to channel revisions only.** FyxOS follows `nixos-YY.MM` and `nixos-unstable`
-  revisions, which Hydra has already built and pushed. It never follows an arbitrary
-  nixpkgs commit.
-- **No overlays on nixpkgs packages.** FyxOS adds packages. It does not modify existing
-  ones. A lint rejects any overlay that redefines an attribute that exists in nixpkgs.
-- **Measure it.** CI evaluates the reference configurations and checks how many closure
-  paths are substitutable from `cache.nixos.org` (`nix path-info --store
-  https://cache.nixos.org`). A regression below the threshold fails CI.
-
-## 7. Configuration
-
-FyxOS is the NixOS module system plus FyxOS modules. A configuration is a flake:
-
-```nix
-{
-  inputs.fyxos.url = "github:FyxOS/FyxOS";
-
-  outputs = { fyxos, ... }: {
-    nixosConfigurations.laptop = fyxos.lib.system {
-      system = "x86_64-linux";
-      modules = [
-        ./hardware-configuration.nix
-        ({ pkgs, ... }: {
-          fyx.fhs.enable = true;                 # default on FyxOS
-          fyx.fhs.profiles = [ "base" "manylinux" "desktop" ];
-          fyx.fhs.libraries = [ pkgs.libGLU ];   # extra libraries in /usr/lib
-          fyx.fhs.binaries  = [ pkgs.python3 ];  # /usr/bin/python3
-        })
-      ];
-    };
-  };
-}
-```
-
-`fyxos.lib.system` is a thin wrapper over `nixpkgs.lib.nixosSystem` that adds the FyxOS
-modules and the FyxOS substituter. The FHS module itself (`fyxos.nixosModules.fhs`) is
-designed to import into a plain NixOS configuration too. That gives existing NixOS users a
-low-risk way to adopt it, and gives the module a path upstream.
-
-**Diagnostics.** `fyx why <binary>` runs `ldd`-style resolution against the FHS root. It
-reports each missing soname and the nixpkgs attribute that provides it, using
-`nix-index` data, together with the configuration line that adds it.
-
-## 8. Activation and rollback
-
-- `/usr` is a symlink to `/run/current-system/fhs/usr`. Switching generations is the same
-  atomic symlink flip that NixOS already performs for `/run/current-system`. There is no
-  bind-mount juggling and no window where `/usr` is half-updated.
-- `/usr/local` and `/opt` are real, writable directories on the root filesystem, for
-  software the user installs by hand. `/usr/local` is reached through a symlink out of
-  the read-only tree.
-- The initrd and early boot do not depend on the FHS root. A broken FHS root cannot
-  make the system unbootable.
-
-## 9. Security considerations
-
-- The FHS root is read-only and in the store, so it is no more writable than any other
-  system path.
-- Loader behaviour for setuid binaries is unchanged: glibc's secure mode ignores
-  `LD_LIBRARY_PATH`, and FyxOS sets no such variables anyway.
-- The FHS root widens the set of libraries that a foreign binary *can* load. It does not
-  widen what native packages load (§4).
-
-## 10. Open questions
-
-1. **Exact nixpkgs glibc loader patches.** Confirm which patches make `ld.so` ignore
-   `/etc/ld.so.cache` and the FHS defaults. Confirm how cleanly they can be dropped for
-   `fhs-ld` (§5).
-2. **`/usr` as a symlink versus a read-only bind mount.** A few programs `realpath`
-   their own location and might be confused by landing in `/nix/store`. Measure on the
-   test corpus before choosing.
-3. **Soname collisions** inside large profiles such as `desktop`. Decide whether these
-   need priority rules or are always a configuration error.
-4. **i686 multilib cache coverage.** Measure how much of `pkgsi686Linux` is on
-   `cache.nixos.org` for the `gaming` profile.
-5. **aarch64.** Confirm the design maps to `/lib/ld-linux-aarch64.so.1` with the same
-   cache coverage.
-6. **Interaction with nix-ld and envfs** on systems that already enable them. Decide
-   whether FyxOS should refuse, absorb, or coexist with them.
-7. **Upstreaming.** Which parts of the FHS module would nixpkgs accept? The ongoing FHS
-   revision for store-based Unixes is directly relevant (see [prior art](prior-art.md)).
+1. nix-ld's library directory path inside the system profile, and whether `/usr/lib`
+   can point to it directly (§3.2).
+2. nix-ld behaviour without `NIX_LD_LIBRARY_PATH` set (§3.1).
+3. Whether NixOS activation conflicts with a `/usr/lib` or `/lib` link. NixOS already
+   manages `/usr/bin/env`.
+4. aarch64: nix-ld supports it. Confirm the paths (`/lib/ld-linux-aarch64.so.1`).
