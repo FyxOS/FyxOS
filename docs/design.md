@@ -10,8 +10,9 @@ These are hard rules. A change that breaks one is rejected, however useful it is
 1. **Zero compute budget.** FyxOS adds no derivation that cannot be fetched from
    `cache.nixos.org`, except trivial local ones: symlink trees and text files that build
    in seconds.
-2. **Zero hosting budget.** It has no binary cache, ISO, channel, or website. The GitHub
-   repository is the only thing FyxOS publishes.
+2. **Small hosting budget, spent only on ISOs.** FyxOS publishes installer ISOs and nothing
+   else. It has no binary cache, channel, or website. ISOs are stock nixpkgs installer
+   images with the FyxOS flake preloaded (§6). Budget: a few GB in total.
 3. **Minimal surface.** FyxOS makes NixOS FHS-compatible and does nothing else.
    Desktops, defaults, and opinions live in other projects.
 4. **Never change nixpkgs.** There are no overlays and no patched packages. Changing a
@@ -44,7 +45,7 @@ library path, then hands off to them. FyxOS:
 - sets `programs.nix-ld.libraries` from `fyx.fhs.libraries` (§3.2).
 
 It does not build its own loader. A glibc built with standard search paths would mean
-compiling and hosting glibc, which violates constraints 1 and 2.
+compiling glibc and hosting a cache for it, which violates constraints 1 and 2.
 
 nix-ld finds its library path through `NIX_LD_LIBRARY_PATH`. Only the shim reads that
 variable. The normal glibc loader ignores it, so native nixpkgs binaries are unaffected.
@@ -96,25 +97,50 @@ dependencies. That objection does not apply here:
 
 ## 5. What FyxOS is
 
-When Phase 1 is done, FyxOS should be:
+When Phase 2 is done, FyxOS should be:
 
 - `flake.nix` exposing `nixosModules.default`;
 - one module of roughly a hundred lines that sets nix-ld options, declares the
   tmpfiles rules, and defines `fyx.fhs.{libraries,extraLibraries,binaries}`;
+- `packages.x86_64-linux.iso` and the `fyxos-install` script (§6);
 - a NixOS VM test (`nixosTests`-style) that runs a few foreign binaries. It runs locally
   or on free CI for public repositories. No hosted runners are paid for.
 
-## 6. Out of scope
+## 6. Installer ISO
+
+The ISO exists so that a fresh install starts out as FyxOS, with the flake already
+written, rather than as NixOS that has to be converted by hand.
+
+- **Built from stock modules.** Each image is nixpkgs' `installation-cd-minimal.nix` or
+  `installation-cd-graphical-*.nix`, plus the FyxOS module. Every package comes from
+  `cache.nixos.org`. The only local work is assembling the squashfs and ISO.
+- **Preloaded flake.** `/etc/fyxos/` holds a starter `flake.nix` and a `flake.lock` that
+  pins the same nixpkgs revision the ISO was built from. The nixpkgs and FyxOS sources
+  are in the image's store, so the configuration evaluates offline. Installed packages
+  still download from the cache.
+- **`fyxos-install`.** A shell script runs `nixos-generate-config`, copies the flake to
+  `/mnt/etc/nixos`, and runs `nixos-install --flake /mnt/etc/nixos#fyxos`.
+- **Built by anyone.** The image is the flake output `nix build github:FyxOS/FyxOS#iso`.
+  Published images are a convenience, not the only way to get one.
+
+| Image | Approximate size | Hosting |
+|---|---|---|
+| Minimal (console) | 1–1.5 GB | GitHub Releases (free, 2 GiB per-file limit) |
+| Graphical | ~3 GB | Over the GitHub per-file limit. Needs FyxOS-paid hosting or a split upload **[verify]** |
+
+Keep only the latest one or two releases' images to stay within the budget.
+
+## 7. Out of scope
 
 | Idea | Why not |
 |---|---|
 | A custom glibc or loader with standard search paths | Needs compute and a cache (constraints 1 and 2) |
 | An FHS-prefix rebuild of nixpkgs | Loses the cache entirely |
-| An installer ISO or channels | Hosting (constraint 2). Use the NixOS ISO |
+| Channels or a binary cache | FyxOS has no packages of its own to serve |
 | i686 multilib, Steam profiles, desktop library sets | Belong in downstream modules |
 | A `fyx why` diagnostics tool | Nice to have later, not needed for compatibility |
 
-## 7. Open questions
+## 8. Open questions
 
 1. nix-ld's library directory path inside the system profile, and whether `/usr/lib`
    can point to it directly (§3.2).

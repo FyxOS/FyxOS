@@ -1,7 +1,7 @@
 # Roadmap
 
-Every phase stays inside the [constraints](design.md#1-constraints): no compute budget, no
-hosting budget, and nothing beyond FHS compatibility.
+Every phase stays inside the [constraints](design.md#1-constraints): no compute budget,
+hosting only for ISOs, and nothing beyond FHS compatibility.
 
 ## Phase 0: validation
 
@@ -24,7 +24,17 @@ In a local NixOS VM, set the options by hand and check each **[verify]** item in
 
 **Exit:** a stock NixOS user can import one module and run the corpus.
 
-## Phase 2: upstream
+## Phase 2: installer ISO
+
+- `nix build .#iso`: the stock minimal installer plus the FyxOS module and a preloaded
+  flake (design §6).
+- `fyxos-install`.
+- Publish the minimal ISO to GitHub Releases. Add a graphical ISO if hosting allows.
+
+**Exit:** boot the ISO, run `fyxos-install`, reboot into a system where the Phase 0 corpus
+runs.
+
+## Phase 3: upstream
 
 Propose the useful parts to nixpkgs: a default FHS library set for nix-ld, and the
 `/usr/lib` link. If nixpkgs adopts them, FyxOS shrinks further. That is the intended

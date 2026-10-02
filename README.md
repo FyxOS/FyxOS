@@ -28,8 +28,10 @@ FyxOS is a **single NixOS module**, imported from a flake. It is not a fork:
 
 - **No packages of its own.** Everything comes from your nixpkgs and
   `cache.nixos.org`. FyxOS builds nothing heavier than a symlink tree.
-- **No infrastructure.** It has no binary cache, no installer image, and no channel.
-  Install with the official NixOS ISO, then import FyxOS.
+- **Almost no infrastructure.** No binary cache, no channel. The one thing FyxOS hosts is
+  an installer ISO. That ISO is the stock NixOS installer with the FyxOS flake preloaded,
+  so a fresh install is FyxOS from the first boot. You can also add the module to an
+  existing NixOS system.
 - **Reuses what nixpkgs already ships.** The loader is
   [nix-ld](https://github.com/nix-community/nix-ld). FyxOS's job is to turn it on by
   default and give it the standard paths.
