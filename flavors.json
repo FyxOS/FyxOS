@@ -29,6 +29,6 @@
     "description": "The FyxOS base alone: console, FHS layer, nothing else",
     "flake": null,
     "module": null,
-    "status": "planned"
+    "status": "ready"
   }
 ]

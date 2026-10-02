@@ -1,0 +1,32 @@
+# This machine's own settings, written by fyxos-install. Edit freely.
+{ lib, ... }:
+{
+  networking.hostName = "@HOSTNAME@";
+  networking.networkmanager.enable = true;
+  time.timeZone = "@TIMEZONE@";
+
+  boot.loader.systemd-boot.enable = @EFI@;
+  boot.loader.efi.canTouchEfiVariables = @EFI@;
+  boot.loader.grub = lib.mkIf (!@EFI@) {
+    enable = true;
+    device = "@DISK@";
+  };
+
+  users.users."@USER@" = {
+    isNormalUser = true;
+    extraGroups = [ "wheel" "networkmanager" ];
+  };
+
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nixpkgs.config.allowUnfree = true;
+
+  # Set by the installer when it found an NVIDIA GPU: nixpkgs' production driver.
+  hardware.graphics.enable = lib.mkIf @NVIDIA@ true;
+  services.xserver.videoDrivers = lib.mkIf @NVIDIA@ [ "nvidia" ];
+  hardware.nvidia = lib.mkIf @NVIDIA@ {
+    open = true;
+    modesetting.enable = true;
+  };
+
+  system.stateVersion = "26.05";
+}
