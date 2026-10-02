@@ -9,7 +9,7 @@ answers. FyxOS builds on what they learned.
 | Project | What it does | Gap FyxOS addresses |
 |---|---|---|
 | [nix-ld](https://github.com/nix-community/nix-ld) | Shim at `/lib64/ld-linux-x86-64.so.2` that hands off to a store loader using `NIX_LD` / `NIX_LD_LIBRARY_PATH` | **FyxOS's loader.** Off by default and has no `/usr/lib`; FyxOS turns it on and adds the standard paths |
-| [envfs](https://github.com/Mic92/envfs) | FUSE filesystem serving `/bin` and `/usr/bin` from the caller's `PATH` | Executables and shebangs only, no libraries. Results depend on the caller's environment |
+| [envfs](https://github.com/Mic92/envfs) | FUSE filesystem serving `/bin` and `/usr/bin` from the caller's `PATH` | **FyxOS's `/bin` and `/usr/bin`.** Covers executables and shebangs only, so FyxOS pairs it with nix-ld for libraries |
 | [nixos-fhs-compat](https://github.com/balsoft/nixos-fhs-compat) | NixOS modules that link binaries and libraries into `/bin`, `/usr/lib`, … | Closest to FyxOS, but explicitly scoped to containers and VMs, and has no loader |
 | [`buildFHSEnv`](https://ryantm.github.io/nixpkgs/builders/special/fhs-environments/) | Per-application bubblewrap sandbox with a synthetic FHS root (Steam, `vscode-fhs`) | Per app, not system-wide. Needs a wrapper derivation for every program |
 | [nix-alien](https://github.com/thiagokokada/nix-alien) | Detects a foreign binary's libraries and runs it in an FHS shell or via nix-ld | Per binary, after the fact |

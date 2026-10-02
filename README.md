@@ -1,6 +1,24 @@
 # FyxOS
 
-**NixOS, plus the standard Linux library layout. Nothing else.**
+**NixOS with the standard Linux layout, and a choice of systems at install time.**
+
+FyxOS has two parts:
+
+1. **A base:** NixOS (unstable) plus a small layer that gives it the standard library
+   layout other distributions have. Prebuilt software then just runs: manylinux wheels,
+   rustup, vendor SDKs, AppImages, Electron apps.
+2. **An installer:** a small ISO that asks *"What kind of system do you want?"* and
+   installs the flavor you choose over the network, straight from `cache.nixos.org`.
+
+```
+FyxOS installer
+  ▸ What kind of system do you want?
+      Atrium            polished windows, mouse-first KDE desktop
+      Autarchy          Omarchy-style keyboard-driven Hyprland (stable or latest)
+      Minimal           just the base
+```
+
+## The FHS problem
 
 On NixOS, a binary built for "Linux" usually fails to start:
 
@@ -10,68 +28,40 @@ bash: ./some-vendor-tool: cannot execute: required file not found
 ```
 
 It needs `/lib64/ld-linux-x86-64.so.2`, `/usr/lib`, and `/usr/bin/python3`, which every
-other distribution has. Many kinds of prebuilt software assume those paths:
+other distribution provides. The FyxOS base adds them using tools nixpkgs already ships:
+[nix-ld](https://github.com/nix-community/nix-ld) and
+[envfs](https://github.com/Mic92/envfs). It never relocates the Nix store, so every
+package still comes from the official binary cache.
 
-- manylinux wheels
-- npm and Cargo prebuilt binaries
-- rustup
-- VS Code Server
-- JetBrains IDEs
-- AppImages
-- vendor SDKs
+## Flavors
 
-FyxOS adds those paths, so such binaries run unmodified.
+A flavor is a flake that turns the base into a complete system. Each one lives in its
+own repository:
+
+| Flavor | What it is |
+|---|---|
+| [Atrium](https://github.com/FyxOS/Atrium) | KDE Plasma desktop, polished windows, mouse-first |
+| [Autarchy](https://github.com/FyxOS/Autarchy) | A port of Omarchy, in *stable* (a pinned Omarchy release) and *latest* variants |
+| Minimal | The base alone |
+
+The installed system is a flake that **you** own. The flavor is just one input. You
+switch flavors by changing that input and rebuilding, and you can return to the
+previous one from the boot menu.
 
 ## Small on purpose
 
-FyxOS is a **single NixOS module**, imported from a flake. It is not a fork:
-
-- **No packages of its own.** Everything comes from your nixpkgs and
-  `cache.nixos.org`. FyxOS builds nothing heavier than a symlink tree.
-- **Almost no infrastructure.** No binary cache, no channel. The one thing FyxOS hosts is
-  an installer ISO. That ISO is the stock NixOS installer with the FyxOS flake preloaded,
-  so a fresh install is FyxOS from the first boot. You can also add the module to an
-  existing NixOS system.
-- **Reuses what nixpkgs already ships.** The loader is
-  [nix-ld](https://github.com/nix-community/nix-ld). FyxOS's job is to turn it on by
-  default and give it the standard paths.
-
-```nix
-{
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-  inputs.fyxos.url = "github:FyxOS/FyxOS";
-  inputs.fyxos.inputs.nixpkgs.follows = "nixpkgs";
-
-  outputs = { nixpkgs, fyxos, ... }: {
-    nixosConfigurations.laptop = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux";
-      modules = [ ./configuration.nix fyxos.nixosModules.default ];
-    };
-  };
-}
-```
-
-## What it adds
-
-| Path | Provided by |
-|---|---|
-| `/lib64/ld-linux-x86-64.so.2` | nix-ld's loader shim (from nixpkgs) |
-| `/usr/lib`, `/lib` | Symlink to the current generation's library set |
-| `/usr/bin/bash`, `/bin/bash`, `/usr/bin/python3`, … | Symlinks to declared interpreters |
-
-Everything points through `/run/current-system`, so switching generations and rolling
-back already work, with no extra machinery.
+- **No packages of its own.** Everything comes from nixpkgs and `cache.nixos.org`.
+- **No infrastructure** beyond a minimal installer ISO on GitHub Releases. There is no
+  binary cache, channel, or website.
+- **Opinions live in flavors.** The base only provides FHS compatibility.
 
 ## Status
 
 **Design phase.** See [design](docs/design.md), [prior art](docs/prior-art.md), and
-[roadmap](docs/roadmap.md).
-
-Desktop opinions do not belong here. They live in separate projects such as
-[Autarchy](https://github.com/FyxOS/Autarchy).
+[roadmap](docs/roadmap.md). The flavor registry is [`flavors.json`](flavors.json).
 
 ## Relationship to NixOS
 
 FyxOS is independent and not affiliated with or endorsed by the NixOS Foundation. It
-depends entirely on nixpkgs, NixOS, and the public `cache.nixos.org`, and anything
-useful in it should go upstream.
+depends entirely on nixpkgs, NixOS, and the public `cache.nixos.org`. Small fixes that
+belong upstream go upstream.

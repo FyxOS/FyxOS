@@ -1,150 +1,243 @@
 # FyxOS design
 
-Status: draft. Items marked **[verify]** are assumptions that Phase 0 of the
-[roadmap](roadmap.md) must confirm.
+Status: draft. Items marked **[verify]** are assumptions that the [roadmap](roadmap.md)'s
+Phase 0 must confirm.
 
 ## 1. Constraints
 
 These are hard rules. A change that breaks one is rejected, however useful it is.
 
-1. **Zero compute budget.** FyxOS adds no derivation that cannot be fetched from
-   `cache.nixos.org`, except trivial local ones: symlink trees and text files that build
-   in seconds.
-2. **Small hosting budget, spent only on ISOs.** FyxOS publishes installer ISOs and nothing
-   else. It has no binary cache, channel, or website. ISOs are stock nixpkgs installer
-   images with the FyxOS flake preloaded (§6). Budget: a few GB in total.
-3. **Minimal surface.** FyxOS makes NixOS FHS-compatible and does nothing else.
-   Desktops, defaults, and opinions live in other projects.
-4. **Never change nixpkgs.** There are no overlays and no patched packages. Changing a
-   package would change store paths, lose the cache, and violate rule 1.
+1. **No compute budget.** Installing FyxOS or any listed flavor compiles nothing
+   locally. Two exceptions are allowed:
+   - trivial derivations: symlink trees and text files;
+   - unfree drivers (NVIDIA), which `cache.nixos.org` does not carry **[verify]**.
+2. **Hosting only for installer ISOs.** FyxOS publishes ISOs on GitHub Releases and
+   nothing else. It has no binary cache, channel, or website.
+3. **A minimal base.** The base provides FHS compatibility and nothing else. Desktops
+   and opinions live in flavors (§6).
+4. **Never change nixpkgs packages.** There are no overlays and no patches. A changed
+   package has a different store path, so it is no longer in the cache, which breaks
+   rule 1.
+5. **One nixpkgs: `nixos-unstable`.** The base and every flavor follow it, pinned by
+   `flake.lock`.
 
-## 2. Problem
+## 2. Architecture
 
-Foreign binaries expect the following paths. NixOS does not provide them.
+```
+  machine       your flake: user, hardware, disk, local tweaks     (owned by the user)
+     │ imports
+  flavor        Atrium | Autarchy | Minimal                          (one repo each)
+     │ imports
+  base          FyxOS: nix-ld + /usr/lib + envfs                     (FyxOS/FyxOS)
+     │ on
+  nixpkgs       nixos-unstable, unmodified, from cache.nixos.org
+```
+
+Dependencies only point down the stack. If a flavor needs a hack in the base, that
+means the base has a bug.
+
+## 3. Problem
+
+Prebuilt binaries expect these paths. Stock NixOS has only `/bin/sh` and `/usr/bin/env`.
 
 | Path | Used for |
 |---|---|
 | `/lib64/ld-linux-x86-64.so.2` | ELF interpreter (`PT_INTERP`) |
 | `/usr/lib`, `/lib` | Libraries the binary links against |
-| `/usr/bin/python3`, `/bin/bash`, … | Shebangs and hard-coded tool paths |
+| `/usr/bin/python3`, `/bin/bash`, `/bin/true`, … | Shebangs and hard-coded tool paths |
 
-NixOS ships only `/bin/sh` and `/usr/bin/env`.
+## 4. The base: FHS layer
 
-## 3. Design: add, never relocate
+The guiding rule is **add, never relocate.** `/nix/store` is untouched, so every store
+path still matches `cache.nixos.org`.
 
-`/nix/store` is untouched, so every store path matches `cache.nixos.org`. FyxOS adds
-the three missing pieces as thin layers over the current system generation.
+### 4.1 Loader: nix-ld
 
-### 3.1 Loader: nix-ld
+`programs.nix-ld` (in nixpkgs) puts a shim at `/lib64/ld-linux-x86-64.so.2`. The shim
+hands off to the real glibc loader with the declared library path. The base enables it
+and sets its libraries (§4.2). FyxOS never builds a loader of its own, because that
+would mean compiling glibc (rule 1).
 
-nixpkgs already ships nix-ld and a NixOS module (`programs.nix-ld`). The module installs
-a shim at `/lib64/ld-linux-x86-64.so.2`. The shim finds the real glibc loader and a
-library path, then hands off to them. FyxOS:
+Setting `programs.nix-ld.libraries` *replaces* the module's defaults; it does not add to
+them. The base therefore restates those defaults explicitly.
 
-- enables `programs.nix-ld` by default;
-- sets `programs.nix-ld.libraries` from `fyx.fhs.libraries` (§3.2).
+**[verify]** Check that nix-ld finds the library set when `NIX_LD_LIBRARY_PATH` is
+unset: systemd services, cron, and `ssh host cmd`.
 
-It does not build its own loader. A glibc built with standard search paths would mean
-compiling glibc and hosting a cache for it, which violates constraints 1 and 2.
+### 4.2 Libraries
 
-nix-ld finds its library path through `NIX_LD_LIBRARY_PATH`. Only the shim reads that
-variable. The normal glibc loader ignores it, so native nixpkgs binaries are unaffected.
-**[verify]** That processes outside a login session still find the default library set
-without the variable: systemd services, cron, and `ssh host cmd`. If they do not, FyxOS
-sets the variable through `environment.sessionVariables` plus a systemd
-`DefaultEnvironment`.
+The base set is taken from a workstation where these libraries have been needed in
+practice:
 
-### 3.2 Libraries: `/usr/lib` and `/lib`
+| Group | Libraries |
+|---|---|
+| nix-ld defaults (restated) | zlib, zstd, stdenv.cc.cc, curl, openssl, attr, libssh, bzip2, libxml2, acl, libsodium, util-linux, xz, systemd |
+| C/C++ runtime | stdenv.cc.cc.lib, libffi, libxcrypt, elfutils, libunwind |
+| Legacy crypt | libxcrypt-legacy (`libcrypt.so.1`; uv's prebuilt CPython 3.10/3.11 need it) |
+| Console and scripting | ncurses, readline, sqlite, expat, pcre2, icu |
+| Compression | lz4, brotli, snappy |
+| Soname shims | `libxml2.so.2` → current libxml2 (prebuilt LLVM `ld.lld` asks for the old soname) |
 
-`programs.nix-ld.libraries` becomes a symlink tree in the system profile. FyxOS exposes
-the same tree at the standard paths:
+The **desktop preset** (`fyx.fhs.presets.desktop`) is defined in the base but switched
+off. Desktop flavors switch it on. It adds the libraries that Electron apps,
+Playwright browsers and prebuilt GTK, Qt and Tauri apps need: glib, gtk3, cairo,
+pango, atk, gdk-pixbuf, at-spi2, nss, nspr, dbus, fontconfig, freetype, libGL, libdrm,
+libxkbcommon, mesa, libgbm, vulkan-loader, the X11 client libraries, webkitgtk_4_1,
+libsoup_3, alsa-lib, libpulseaudio, and cups.
+
+The same library tree is exposed at the standard paths, through `/run/current-system` so
+that rollbacks just work:
 
 ```
 /usr/lib -> /run/current-system/sw/share/nix-ld/lib     [verify exact path]
 /lib     -> /usr/lib
 ```
 
-The links are created with `systemd.tmpfiles` rules. They point through
-`/run/current-system`, so a generation switch or rollback changes the target with no
-FyxOS code involved.
+### 4.3 Executables: envfs
 
-`fyx.fhs.libraries` defaults to a short list. It covers command-line binaries and
-manylinux wheels: glibc, libstdc++, libgcc_s, zlib, zstd, xz, bzip2, openssl, libffi,
-ncurses, libuuid, curl, and icu. GUI libraries are opt-in through
-`fyx.fhs.extraLibraries`. Projects like Autarchy add them.
+`services.envfs.enable` mounts `/bin` and `/usr/bin` as a filesystem that resolves any
+name on `PATH`. That makes `#!/usr/bin/python3`, `/bin/true` and `/bin/bash` work.
 
-### 3.3 Interpreters: `/usr/bin`, `/bin`
+An earlier draft preferred a declared list of symlinks for predictability. Real use
+showed such lists go stale, while envfs fixed failures in test suites that hard-code
+`/bin/*`. envfs invents nothing: only names already on `PATH` resolve.
 
-FyxOS creates these links with `systemd.tmpfiles`:
+### 4.4 Known gap: binaries that use the store loader
 
-- `/bin/bash`, `/usr/bin/bash` → bash in the system profile;
-- one `/usr/bin/<name>` for each interpreter in `fyx.fhs.binaries`, which is empty by
-  default. Declaring `python3` gives you `/usr/bin/python3`.
+Some binaries have a `/nix/store` glibc as their interpreter rather than
+`/lib64/ld-linux…`. They never pass through nix-ld, and the store loader does not
+search `/usr/lib`. Examples:
 
-FyxOS deliberately does not use envfs. The path a binary resolves to would depend on
-the caller's `PATH`. Declared links are predictable.
+- rustup's `librustc_driver`;
+- shims that rely on `$ORIGIN`;
+- Rust binaries linked here with `rust-lld`.
 
-## 4. Purity
+The base does not solve this case. Flavors may add targeted workarounds, but the gap is
+documented rather than hidden.
 
-The usual objection to an FHS layout on NixOS is that global paths hide undeclared
-dependencies. That objection does not apply here:
+### 4.5 Diagnostics note
+
+**Do not diagnose with `ldd`.** It calls the loader directly, bypasses the nix-ld shim,
+and reports working foreign binaries as missing libraries. Run the binary itself, or
+compare `patchelf --print-needed` with `ls /usr/lib`.
+
+## 5. Purity
 
 - **Nix builds cannot see `/usr/lib`.** The build sandbox has no `/usr`, so derivations
   stay pure.
-- **Native binaries do not use nix-ld.** Their interpreter is a store path. Only binaries
-  that ask for `/lib64/ld-linux…` go through the shim.
+- **Native binaries do not use nix-ld.** Their interpreter is a store path.
 - **The library set is declared.** The same configuration gives the same `/usr/lib`.
 
-## 5. What FyxOS is
+## 6. Flavors
 
-When Phase 2 is done, FyxOS should be:
+### 6.1 Contract
 
-- `flake.nix` exposing `nixosModules.default`;
-- one module of roughly a hundred lines that sets nix-ld options, declares the
-  tmpfiles rules, and defines `fyx.fhs.{libraries,extraLibraries,binaries}`;
-- `packages.x86_64-linux.iso` and the `fyxos-install` script (§6);
-- a NixOS VM test (`nixosTests`-style) that runs a few foreign binaries. It runs locally
-  or on free CI for public repositories. No hosted runners are paid for.
+A flavor is a flake that exports one or more `nixosModules`. Every listed flavor must:
 
-## 6. Installer ISO
+1. **Follow the base.** Set `inputs.nixpkgs.follows` and `inputs.fyxos.follows`.
+2. **Be cache-clean.** `nix build --dry-run` on a reference machine shows nothing under
+   "will be built", apart from the rule 1 exceptions. This check only evaluates the
+   configuration and needs no build compute.
+3. **Contain nothing personal.** No usernames, hardware, keys, or hosts. The installer
+   and the machine flake supply those.
+4. **Be declarative.** No captured dotfiles copied in. Desktop state is declared through
+   home-manager and plasma-manager.
+5. **Be listed in [`flavors.json`](../flavors.json).** Third-party flavors can join
+   later, by pull request, if they pass this contract.
 
-The ISO exists so that a fresh install starts out as FyxOS, with the flake already
-written, rather than as NixOS that has to be converted by hand.
+### 6.2 Variants
 
-- **Built from stock modules.** Each image is nixpkgs' `installation-cd-minimal.nix` or
-  `installation-cd-graphical-*.nix`, plus the FyxOS module. Every package comes from
-  `cache.nixos.org`. The only local work is assembling the squashfs and ISO.
-- **Preloaded flake.** `/etc/fyxos/` holds a starter `flake.nix` and a `flake.lock` that
-  pins the same nixpkgs revision the ISO was built from. The nixpkgs and FyxOS sources
-  are in the image's store, so the configuration evaluates offline. Installed packages
-  still download from the cache.
-- **`fyxos-install`.** A shell script runs `nixos-generate-config`, copies the flake to
-  `/mnt/etc/nixos`, and runs `nixos-install --flake /mnt/etc/nixos#fyxos`.
-- **Built by anyone.** The image is the flake output `nix build github:FyxOS/FyxOS#iso`.
-  Published images are a convenience, not the only way to get one.
+A flavor repository can export several modules. The registry names the one to use.
+Autarchy exports:
 
-| Image | Approximate size | Hosting |
+- `stable`: a pinned Omarchy release;
+- `latest`: follows Omarchy's main branch.
+
+### 6.3 Switching
+
+The machine flake has a single `flavor` input. Switching means changing that URL (and
+module name), then `nixos-rebuild switch`. The previous flavor stays in the boot menu
+until garbage collection. A `fyxos flavor switch <id>` helper may wrap this later.
+
+## 7. Installer
+
+The ISO is the stock nixpkgs minimal installer, plus the base and a `gum`-based text
+menu called `fyxos-install`. Its steps:
+
+1. **Network:** `nmtui`. Everything after this step downloads.
+2. **Disk:** the whole chosen disk is used (v1). The user picks a filesystem, and none
+   is preselected:
+   - ext4;
+   - btrfs with snapshots;
+   - XFS with reflink, which is fast for copy-heavy builds such as Rust.
+
+   There is a LUKS encryption toggle, and partitioning is done with disko. Installing
+   into free space beside another OS comes in **v2**.
+3. **Flavor:** chosen from `flavors.json`.
+4. **User:** username, password, timezone.
+5. **Hardware:** `nixos-generate-config`. If `lspci` shows an NVIDIA GPU, the installer
+   enables `hardware.nvidia` with nixpkgs' default production driver. Driver overrides
+   are not part of FyxOS.
+6. **Generate** `/mnt/etc/nixos/flake.nix`. Unfree software is allowed by default.
+7. **Install:** `nixos-install --flake /mnt/etc/nixos#fyxos`, then reboot.
+
+The generated machine flake looks like this:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    fyxos = { url = "github:FyxOS/FyxOS"; inputs.nixpkgs.follows = "nixpkgs"; };
+    flavor = {
+      url = "github:FyxOS/Atrium";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.fyxos.follows = "fyxos";
+    };
+  };
+
+  outputs = { nixpkgs, fyxos, flavor, ... }: {
+    nixosConfigurations.fyxos = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        fyxos.nixosModules.default
+        flavor.nixosModules.default      # the registry's "module" field
+        ./hardware-configuration.nix
+        ./disko.nix
+        ./local.nix                      # user, timezone, GPU, allowUnfree
+      ];
+    };
+  };
+}
+```
+
+### 7.1 ISO and hosting
+
+| Image | Size | Hosting |
 |---|---|---|
-| Minimal (console) | 1–1.5 GB | GitHub Releases (free, 2 GiB per-file limit) |
-| Graphical | ~3 GB | Over the GitHub per-file limit. Needs FyxOS-paid hosting or a split upload **[verify]** |
+| Minimal installer (the only one) | about 1–1.5 GB | GitHub Releases (free, 2 GiB per file) |
 
-Keep only the latest one or two releases' images to stay within the budget.
+Flavor packages are not on the ISO. They download during install. Anyone can build the
+image with `nix build github:FyxOS/FyxOS#iso`. Only the latest one or two releases keep
+their images.
 
-## 7. Out of scope
+## 8. Out of scope
 
 | Idea | Why not |
 |---|---|
-| A custom glibc or loader with standard search paths | Needs compute and a cache (constraints 1 and 2) |
-| An FHS-prefix rebuild of nixpkgs | Loses the cache entirely |
-| Channels or a binary cache | FyxOS has no packages of its own to serve |
-| i686 multilib, Steam profiles, desktop library sets | Belong in downstream modules |
-| A `fyx why` diagnostics tool | Nice to have later, not needed for compatibility |
+| A custom glibc or loader | Needs compute and a cache (rules 1 and 2) |
+| A stable-nixpkgs variant of the base | Doubles testing. Rule 5 |
+| Overlays or driver overrides in the base or flavors | Rule 4. They belong in a user's machine flake |
+| A graphical installer ISO | Over 2 GiB. The text installer covers it |
+| Offline installation | Flavors download by design |
 
-## 8. Open questions
+## 9. Open questions
 
-1. nix-ld's library directory path inside the system profile, and whether `/usr/lib`
-   can point to it directly (§3.2).
-2. nix-ld behaviour without `NIX_LD_LIBRARY_PATH` set (§3.1).
-3. Whether NixOS activation conflicts with a `/usr/lib` or `/lib` link. NixOS already
-   manages `/usr/bin/env`.
-4. aarch64: nix-ld supports it. Confirm the paths (`/lib/ld-linux-aarch64.so.1`).
+1. nix-ld's library directory path, and whether `/usr/lib` can point to it directly
+   (§4.2).
+2. nix-ld without `NIX_LD_LIBRARY_PATH` set (§4.1).
+3. Whether NixOS activation conflicts with the `/usr/lib` and `/lib` links, and whether
+   envfs replacing `/usr/bin/env` and `/bin/sh` is safe on every flavor.
+4. Whether unfree packages are absent from `cache.nixos.org` (rule 1 exception).
+5. Whether unstable's `production` NVIDIA driver is still a 595.x release. 610.x has
+   suspend regressions.
+6. aarch64: map the paths to `/lib/ld-linux-aarch64.so.1`.

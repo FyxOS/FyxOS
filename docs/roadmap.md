@@ -1,41 +1,62 @@
 # Roadmap
 
-Every phase stays inside the [constraints](design.md#1-constraints): no compute budget,
-hosting only for ISOs, and nothing beyond FHS compatibility.
+Every phase stays inside the [constraints](design.md#1-constraints). All testing happens in
+VMs or on spare disks, never on a live machine that someone depends on.
 
 ## Phase 0: validation
 
-In a local NixOS VM, set the options by hand and check each **[verify]** item in the
-[design](design.md). Then run a small corpus of foreign binaries unmodified:
+In a NixOS-unstable VM, set the base options by hand and resolve the **[verify]** items
+in the [design](design.md). Then run this corpus of foreign binaries unmodified:
 
-- a manylinux wheel (`pip install numpy`)
-- a rustup toolchain
-- a Go release binary
+- manylinux wheels (`pip install numpy torch`)
+- rustup and a Go release binary
+- a prebuilt LLVM `ld.lld`
 - an AppImage
+- Playwright's Chromium
+- a script with `#!/usr/bin/python3`
 
-**Exit:** the corpus runs, and every store path in the closure comes from
-`cache.nixos.org`.
+**Exit:** the corpus runs, and the closure has nothing to build.
 
-## Phase 1: the module
+## Phase 1: the base
 
 - `flake.nix` with `nixosModules.default`.
-- `fyx.fhs.libraries`, `fyx.fhs.extraLibraries`, `fyx.fhs.binaries`.
-- A NixOS VM test for the Phase 0 corpus.
+- `fyx.fhs.libraries`, the desktop preset, and envfs.
+- A NixOS VM test for the corpus.
 
-**Exit:** a stock NixOS user can import one module and run the corpus.
+**Exit:** a NixOS-unstable system that imports the module runs the corpus.
 
-## Phase 2: installer ISO
+## Phase 2: Atrium
 
-- `nix build .#iso`: the stock minimal installer plus the FyxOS module and a preloaded
-  flake (design §6).
-- `fyxos-install`.
-- Publish the minimal ISO to GitHub Releases. Add a graphical ISO if hosting allows.
+- Write [Atrium](https://github.com/FyxOS/Atrium) from scratch as a declarative KDE
+  flavor.
+- Pass the flavor contract.
 
-**Exit:** boot the ISO, run `fyxos-install`, reboot into a system where the Phase 0 corpus
-runs.
+**Exit:** Atrium installs in a VM with nothing to build except unfree drivers.
 
-## Phase 3: upstream
+## Phase 3: installer
 
-Propose the useful parts to nixpkgs: a default FHS library set for nix-ld, and the
-`/usr/lib` link. If nixpkgs adopts them, FyxOS shrinks further. That is the intended
-end state.
+- `fyxos-install` (gum), disko presets, `flavors.json` with Minimal and Atrium.
+- `nix build .#iso`, and the first ISO on GitHub Releases.
+
+**Exit:** boot the ISO in a VM, choose Atrium, and reboot into a working desktop.
+
+## Phase 4: Autarchy
+
+- [Autarchy](https://github.com/FyxOS/Autarchy) `stable`, pinned to an Omarchy release.
+  Then `latest`.
+- Add both to the registry.
+
+**Exit:** both variants install from the same ISO. This is the reproducibility proof.
+
+## Phase 5: switchover
+
+The maintainer's own workstation moves from its plain-NixOS configuration to a private
+machine flake that imports FyxOS and Atrium. The maintainer starts this step; no phase
+triggers it automatically.
+
+## v2
+
+- Dual-boot: install into free space beside another OS.
+- Third-party flavors, by pull request and contract check.
+- A `fyxos flavor switch` helper.
+- Small fixes sent upstream to nixpkgs, such as the nix-ld docs and library list.
