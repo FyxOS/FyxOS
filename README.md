@@ -57,8 +57,20 @@ previous one from the boot menu.
 
 ## Status
 
-**Design phase.** See [design](docs/design.md), [prior art](docs/prior-art.md), and
-[roadmap](docs/roadmap.md). The flavor registry is [`flavors.json`](flavors.json).
+**Preview.** Download the installer from
+[Releases](https://github.com/FyxOS/FyxOS/releases), boot it, and run
+`sudo fyxos-install`. To add the base to an existing NixOS (unstable) flake
+instead:
+
+```nix
+inputs.fyxos = { url = "github:FyxOS/FyxOS"; inputs.nixpkgs.follows = "nixpkgs"; };
+# modules = [ fyxos.nixosModules.default ... ];
+```
+
+`nix flake check` boots the base in a VM and runs downloaded binaries against
+it. `tests/install-qemu.py` installs the ISO unattended and boots the result.
+See [design](docs/design.md), [prior art](docs/prior-art.md),
+[roadmap](docs/roadmap.md), and the registry, [`flavors.json`](flavors.json).
 
 ## Relationship to NixOS
 
