@@ -38,16 +38,19 @@ The FHS layers are built from the real NixOS `nix-ld` module at nixos-unstable
 | Playwright Chromium | ✗ | ✗ | ✗ | ✓ |
 | Binary with a Nix-store loader | ✗ | ✗ | ✗ | ✗ (known gap) |
 
-¹ This needs a bosn that keeps a build-context file's execute bit
-([zackees/bosn#428](https://github.com/zackees/bosn/pull/428), which in turn
-needs [kernal-api#394](https://github.com/zackees/kernal-api/pull/394)).
-Released bosn copies `envfs-shim` into the image without its execute bit, so
-these two checks fail with `Permission denied`.
+¹ This needs a bosn that keeps a build-context file's execute bit. The fix is
+merged on bosn `main` ([zackees/bosn#428](https://github.com/zackees/bosn/pull/428),
+on top of [kernal-api 0.1.25](https://github.com/zackees/kernal-api/pull/394)) and
+ships with the next bosn release. Older bosn copies `envfs-shim` into the image
+without its execute bit, so these two checks fail with `Permission denied`.
 
 ## Upstream issues found
 
 - **`nixos/nix` image:** `/usr/share` points at `/nix/var/nix/profiles/share`,
   which does not exist; it should be `/nix/var/nix/profiles/default/share`
   (`docker.nix`). `base.sh` repairs it until the upstream fix ships.
-- **bosn:** manifest build contexts dropped file modes. That is fixed by the
-  two PRs above.
+- **bosn:** manifest build contexts dropped file modes. Fixed at the root in
+  kernal-api 0.1.25 (released) and bosn#428 (merged).
+- **envfs:** names were not resolved on `readlink`, which breaks relocatable
+  interpreters behind `#!/usr/bin/python3` on a real booted system
+  ([Mic92/envfs#233](https://github.com/Mic92/envfs/pull/233)).
