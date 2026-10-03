@@ -35,7 +35,7 @@ systemd service without nix-ld variables. Found upstream:
 |---|---|
 | 1. Base module | Done: `modules/fhs.nix`, VM-tested |
 | 2. Atrium | First version, VM-tested ([FyxOS/Atrium](https://github.com/FyxOS/Atrium)) |
-| 3. Installer | Done. `nix build .#iso` (1.5 GB); `tests/install-qemu.py` installs Minimal on btrfs over UEFI unattended and boots it |
+| 3. Installer | Done. `nix build .#iso` (1.5 GB, [v0.1.0](https://github.com/FyxOS/FyxOS/releases/tag/v0.1.0)); `tests/install-qemu.py` installs unattended over UEFI: Minimal on btrfs (boots to login), Atrium on XFS (boots to the greeter) |
 | 4. Autarchy | `stable` and `latest` VM-tested ([FyxOS/Autarchy](https://github.com/FyxOS/Autarchy)) |
 | 5. Switchover | Started by the maintainer |
 
