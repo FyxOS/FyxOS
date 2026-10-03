@@ -1,4 +1,4 @@
-# Boots NixOS with the FyxOS base and runs unmodified foreign binaries: the
+# Boots NixOS with the Omnix base and runs unmodified foreign binaries: the
 # booted-VM half of roadmap Phase 0 (real envfs, real activation and switch).
 { pkgs, module }:
 let
@@ -13,7 +13,7 @@ let
   };
 in
 pkgs.testers.runNixOSTest {
-  name = "fyx-fhs";
+  name = "omnix-fhs";
   nodes.machine = {
     imports = [ module ];
     environment.systemPackages = [ pkgs.gnutar pkgs.xz pkgs.gzip ];
@@ -21,7 +21,7 @@ pkgs.testers.runNixOSTest {
   };
   testScript = ''
     machine.wait_for_unit("multi-user.target")
-    machine.wait_for_unit("fyx-ldconfig.service")
+    machine.wait_for_unit("omnix-ldconfig.service")
 
     with subtest("standard paths exist"):
         machine.succeed("test -e /lib64/ld-linux-x86-64.so.2")

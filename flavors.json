@@ -3,7 +3,7 @@
     "id": "atrium",
     "name": "Atrium",
     "description": "KDE Plasma desktop: polished windows, mouse-first",
-    "flake": "github:FyxOS/Atrium",
+    "flake": "github:Omnix-Linux/Atrium",
     "module": "default",
     "status": "ready"
   },
@@ -11,7 +11,7 @@
     "id": "autarchy-stable",
     "name": "Autarchy (stable)",
     "description": "Omarchy-style keyboard-driven Hyprland, pinned to an Omarchy release",
-    "flake": "github:FyxOS/Autarchy",
+    "flake": "github:Omnix-Linux/Autarchy",
     "module": "stable",
     "status": "ready"
   },
@@ -19,14 +19,14 @@
     "id": "autarchy-latest",
     "name": "Autarchy (latest)",
     "description": "Omarchy-style keyboard-driven Hyprland, tracking Omarchy main",
-    "flake": "github:FyxOS/Autarchy",
+    "flake": "github:Omnix-Linux/Autarchy",
     "module": "latest",
     "status": "ready"
   },
   {
     "id": "minimal",
     "name": "Minimal",
-    "description": "The FyxOS base alone: console, FHS layer, nothing else",
+    "description": "The Omnix base alone: console, FHS layer, nothing else",
     "flake": null,
     "module": null,
     "status": "ready"

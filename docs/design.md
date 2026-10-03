@@ -1,4 +1,4 @@
-# FyxOS design
+# Omnix design
 
 Status: draft. Items marked **[verify]** are assumptions that the [roadmap](roadmap.md)'s
 Phase 0 must confirm.
@@ -7,12 +7,12 @@ Phase 0 must confirm.
 
 These are hard rules. A change that breaks one is rejected, however useful it is.
 
-1. **No compute budget.** Installing FyxOS or any listed flavor compiles nothing
+1. **No compute budget.** Installing Omnix or any listed flavor compiles nothing
    locally. Two exceptions are allowed:
    - trivial derivations: symlink trees and text files;
    - unfree packages (the NVIDIA driver, VS Code), which `cache.nixos.org` does not
      carry (checked at nixos-unstable `c59305b`).
-2. **Hosting only for installer ISOs.** FyxOS publishes ISOs on GitHub Releases and
+2. **Hosting only for installer ISOs.** Omnix publishes ISOs on GitHub Releases and
    nothing else. It has no binary cache, channel, or website.
 3. **A minimal base.** The base provides FHS compatibility and nothing else. Desktops
    and opinions live in flavors (§6).
@@ -29,7 +29,7 @@ These are hard rules. A change that breaks one is rejected, however useful it is
      │ imports
   flavor        Atrium | Autarchy | Minimal                          (one repo each)
      │ imports
-  base          FyxOS: nix-ld + /usr/lib + envfs                     (FyxOS/FyxOS)
+  base          Omnix: nix-ld + /usr/lib + envfs                     (Omnix-Linux/Omnix)
      │ on
   nixpkgs       nixos-unstable, unmodified, from cache.nixos.org
 ```
@@ -56,7 +56,7 @@ path still matches `cache.nixos.org`.
 
 `programs.nix-ld` (in nixpkgs) puts a shim at `/lib64/ld-linux-x86-64.so.2`. The shim
 hands off to the real glibc loader with the declared library path. The base enables it
-and sets its libraries (§4.2). FyxOS never builds a loader of its own, because that
+and sets its libraries (§4.2). Omnix never builds a loader of its own, because that
 would mean compiling glibc (rule 1).
 
 Setting `programs.nix-ld.libraries` *adds to* the module's defaults. The module
@@ -82,7 +82,7 @@ practice:
 | Compression | lz4, brotli, snappy |
 | Soname shims | `libxml2.so.2` → current libxml2 (prebuilt LLVM `ld.lld` asks for the old soname) |
 
-The **desktop preset** (`fyx.fhs.presets.desktop`) is defined in the base but switched
+The **desktop preset** (`omnix.fhs.presets.desktop`) is defined in the base but switched
 off. Desktop flavors switch it on. It adds the libraries that Electron apps,
 Playwright browsers and prebuilt GTK, Qt and Tauri apps need: glib, gtk3, cairo,
 pango, atk, gdk-pixbuf, at-spi2, nss, nspr, dbus, fontconfig, freetype, libGL, libdrm,
@@ -152,7 +152,7 @@ compare `patchelf --print-needed` with `ls /usr/lib`.
 
 A flavor is a flake that exports one or more `nixosModules`. Every listed flavor must:
 
-1. **Follow the base.** Set `inputs.nixpkgs.follows` and `inputs.fyxos.follows`.
+1. **Follow the base.** Set `inputs.nixpkgs.follows` and `inputs.omnix.follows`.
 2. **Be cache-clean.** `nix build --dry-run` on a reference machine shows nothing under
    "will be built", apart from the rule 1 exceptions. This check only evaluates the
    configuration and needs no build compute.
@@ -175,12 +175,12 @@ Autarchy exports:
 
 The machine flake has a single `flavor` input. Switching means changing that URL (and
 module name), then `nixos-rebuild switch`. The previous flavor stays in the boot menu
-until garbage collection. A `fyxos flavor switch <id>` helper may wrap this later.
+until garbage collection. An `omnix flavor switch <id>` helper may wrap this later.
 
 ## 7. Installer
 
 The ISO is the stock nixpkgs minimal installer, plus the base and a `gum`-based text
-menu called `fyxos-install`. Its steps:
+menu called `omnix-install`. Its steps:
 
 1. **Network:** `nmtui`. Everything after this step downloads.
 2. **Disk:** the whole chosen disk is used (v1). The user picks a filesystem, and none
@@ -195,9 +195,9 @@ menu called `fyxos-install`. Its steps:
 4. **User:** username, password, timezone.
 5. **Hardware:** `nixos-generate-config`. If `lspci` shows an NVIDIA GPU, the installer
    enables `hardware.nvidia` with nixpkgs' default production driver. Driver overrides
-   are not part of FyxOS.
+   are not part of Omnix.
 6. **Generate** `/mnt/etc/nixos/flake.nix`. Unfree software is allowed by default.
-7. **Install:** `nixos-install --flake /mnt/etc/nixos#fyxos`, then reboot.
+7. **Install:** `nixos-install --flake /mnt/etc/nixos#omnix`, then reboot.
 
 The generated machine flake looks like this:
 
@@ -205,19 +205,19 @@ The generated machine flake looks like this:
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    fyxos = { url = "github:FyxOS/FyxOS"; inputs.nixpkgs.follows = "nixpkgs"; };
+    omnix = { url = "github:Omnix-Linux/Omnix"; inputs.nixpkgs.follows = "nixpkgs"; };
     flavor = {
-      url = "github:FyxOS/Atrium";
+      url = "github:Omnix-Linux/Atrium";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.fyxos.follows = "fyxos";
+      inputs.omnix.follows = "omnix";
     };
   };
 
-  outputs = { nixpkgs, fyxos, flavor, ... }: {
-    nixosConfigurations.fyxos = nixpkgs.lib.nixosSystem {
+  outputs = { nixpkgs, omnix, flavor, ... }: {
+    nixosConfigurations.omnix = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        fyxos.nixosModules.default
+        omnix.nixosModules.default
         flavor.nixosModules.default      # the registry's "module" field
         ./hardware-configuration.nix
         ./disko.nix
@@ -235,7 +235,7 @@ The generated machine flake looks like this:
 | Minimal installer (the only one) | about 1–1.5 GB | GitHub Releases (free, 2 GiB per file) |
 
 Flavor packages are not on the ISO. They download during install. Anyone can build the
-image with `nix build github:FyxOS/FyxOS#iso`. Only the latest one or two releases keep
+image with `nix build github:Omnix-Linux/Omnix#iso`. Only the latest one or two releases keep
 their images.
 
 ## 8. Out of scope

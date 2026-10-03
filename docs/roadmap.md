@@ -26,7 +26,7 @@ systemd service without nix-ld variables. Found upstream:
   (python-build-standalone) cannot run through `#!/usr/bin/python3`
   ([Mic92/envfs#233](https://github.com/Mic92/envfs/pull/233)).
 - envfs on the live ISO breaks NetworkManager DNS
-  ([#1](https://github.com/FyxOS/FyxOS/issues/1)); the ISO no longer includes
+  ([#1](https://github.com/Omnix-Linux/Omnix/issues/1)); the ISO no longer includes
   the FHS layer.
 
 ## Status (2026-10-03)
@@ -34,22 +34,22 @@ systemd service without nix-ld variables. Found upstream:
 | Phase | State |
 |---|---|
 | 1. Base module | Done: `modules/fhs.nix`, VM-tested |
-| 2. Atrium | First version, VM-tested ([FyxOS/Atrium](https://github.com/FyxOS/Atrium)) |
-| 3. Installer | Done. `nix build .#iso` (1.5 GB, [v0.1.0](https://github.com/FyxOS/FyxOS/releases/tag/v0.1.0)); `tests/install-qemu.py` installs unattended over UEFI: Minimal on btrfs (boots to login), Atrium on XFS (boots to the greeter) |
-| 4. Autarchy | `stable` and `latest` VM-tested ([FyxOS/Autarchy](https://github.com/FyxOS/Autarchy)) |
+| 2. Atrium | First version, VM-tested ([Omnix-Linux/Atrium](https://github.com/Omnix-Linux/Atrium)) |
+| 3. Installer | Done. `nix build .#iso` (1.5 GB, [v0.1.0](https://github.com/Omnix-Linux/Omnix/releases/tag/v0.1.0)); `tests/install-qemu.py` installs unattended over UEFI: Minimal on btrfs (boots to login), Atrium on XFS (boots to the greeter) |
+| 4. Autarchy | `stable` and `latest` VM-tested ([Omnix-Linux/Autarchy](https://github.com/Omnix-Linux/Autarchy)) |
 | 5. Switchover | Started by the maintainer |
 
 ## Phase 1: the base
 
 - `flake.nix` with `nixosModules.default`.
-- `fyx.fhs.libraries`, the desktop preset, and envfs.
+- `omnix.fhs.libraries`, the desktop preset, and envfs.
 - A NixOS VM test for the corpus.
 
 **Exit:** a NixOS-unstable system that imports the module runs the corpus.
 
 ## Phase 2: Atrium
 
-- Write [Atrium](https://github.com/FyxOS/Atrium) from scratch as a declarative KDE
+- Write [Atrium](https://github.com/Omnix-Linux/Atrium) from scratch as a declarative KDE
   flavor.
 - Pass the flavor contract.
 
@@ -57,14 +57,14 @@ systemd service without nix-ld variables. Found upstream:
 
 ## Phase 3: installer
 
-- `fyxos-install` (gum), disko presets, `flavors.json` with Minimal and Atrium.
+- `omnix-install` (gum), disko presets, `flavors.json` with Minimal and Atrium.
 - `nix build .#iso`, and the first ISO on GitHub Releases.
 
 **Exit:** boot the ISO in a VM, choose Atrium, and reboot into a working desktop.
 
 ## Phase 4: Autarchy
 
-- [Autarchy](https://github.com/FyxOS/Autarchy) `stable`, pinned to an Omarchy release.
+- [Autarchy](https://github.com/Omnix-Linux/Autarchy) `stable`, pinned to an Omarchy release.
   Then `latest`.
 - Add both to the registry.
 
@@ -73,12 +73,12 @@ systemd service without nix-ld variables. Found upstream:
 ## Phase 5: switchover
 
 The maintainer's own workstation moves from its plain-NixOS configuration to a private
-machine flake that imports FyxOS and Atrium. The maintainer starts this step; no phase
+machine flake that imports Omnix and Atrium. The maintainer starts this step; no phase
 triggers it automatically.
 
 ## v2
 
 - Dual-boot: install into free space beside another OS.
 - Third-party flavors, by pull request and contract check.
-- A `fyxos flavor switch` helper.
+- An `omnix flavor switch` helper.
 - Small fixes sent upstream to nixpkgs, such as the nix-ld docs and library list.

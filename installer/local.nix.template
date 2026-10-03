@@ -1,4 +1,4 @@
-# This machine's own settings, written by fyxos-install. Edit freely.
+# This machine's own settings, written by omnix-install. Edit freely.
 { lib, ... }:
 {
   networking.hostName = "@HOSTNAME@";

@@ -1,17 +1,17 @@
 {
-  description = "This machine: FyxOS plus one flavor. Yours to edit.";
+  description = "This machine: Omnix plus one flavor. Yours to edit.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    fyxos = { url = "github:FyxOS/FyxOS"; inputs.nixpkgs.follows = "nixpkgs"; };
+    omnix = { url = "github:Omnix-Linux/Omnix"; inputs.nixpkgs.follows = "nixpkgs"; };
     @FLAVOR_INPUT@
   };
 
-  outputs = { nixpkgs, fyxos, @FLAVOR_ARGS@... }: {
-    nixosConfigurations.fyxos = nixpkgs.lib.nixosSystem {
+  outputs = { nixpkgs, omnix, @FLAVOR_ARGS@... }: {
+    nixosConfigurations.omnix = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        fyxos.nixosModules.default
+        omnix.nixosModules.default
         @FLAVOR_MODULES@
         ./hardware-configuration.nix
         ./local.nix

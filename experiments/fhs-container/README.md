@@ -7,7 +7,7 @@ per FHS mode, under [bosn](https://github.com/zackees/bosn).
 |---|---|
 | `baseline` | Nothing: stock NixOS paths only (`/bin/sh`, `/usr/bin/env`, `/etc/zoneinfo`) |
 | `stock` | `programs.nix-ld.enable = true` with the module's default libraries |
-| `base` | The FyxOS base: library set, `/usr/lib` and `/lib`, an `ldconfig` wrapper with a cache built at activation, and envfs (emulated) |
+| `base` | The Omnix base: library set, `/usr/lib` and `/lib`, an `ldconfig` wrapper with a cache built at activation, and envfs (emulated) |
 | `desktop` | `base` plus the desktop preset |
 
 Each mode is its own image (`docker/<mode>.Dockerfile`). `activate.sh` runs once

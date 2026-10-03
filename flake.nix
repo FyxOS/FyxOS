@@ -1,5 +1,5 @@
 {
-  description = "FyxOS: NixOS with the standard Linux library layout";
+  description = "Omnix: NixOS with the standard Linux library layout";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -22,7 +22,7 @@
         specialArgs.nixpkgsRev = nixpkgs.rev;
         # The installer runs only NixOS tools, so it is the stock installer
         # without the FHS layer; the installed system gets it from its flake.
-        # (envfs on the live ISO also breaks NetworkManager's DNS: FyxOS#1.)
+        # (envfs on the live ISO also breaks NetworkManager's DNS: Omnix#1.)
         modules = [ ./installer/iso.nix ];
       };
       packages.${system}.iso = self.nixosConfigurations.installer.config.system.build.isoImage;

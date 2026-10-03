@@ -1,4 +1,4 @@
-"""End-to-end installer test: boot the FyxOS ISO in QEMU (UEFI), install onto
+"""End-to-end installer test: boot the Omnix ISO in QEMU (UEFI), install onto
 a blank disk unattended over the serial console, then boot the disk alone.
 
     uv run --with pexpect python tests/install-qemu.py ISO OVMF_FD QEMU_BIN [FLAVOR] [FS]
@@ -18,7 +18,7 @@ import pexpect
 iso, ovmf, qemu = sys.argv[1:4]
 flavor = sys.argv[4] if len(sys.argv) > 4 else "minimal"
 fs = sys.argv[5] if len(sys.argv) > 5 else "btrfs"
-work = tempfile.mkdtemp(prefix="fyxos-install-")
+work = tempfile.mkdtemp(prefix="omnix-install-")
 disk = os.path.join(work, "disk.qcow2")
 subprocess.run(["qemu-img", "create", "-f", "qcow2", disk, "40G"], check=True,
                stdout=subprocess.DEVNULL)
@@ -39,18 +39,18 @@ def boot(*extra, display=("-nographic",)):
 vm = boot("-cdrom", iso, "-boot", "d")
 # The prompt ends `$`, a color reset, then a space; match up to the `$`.
 vm.expect(r"nixos@nixos:~\]\$", timeout=600)
-answers = (f"FYXOS_DISK=/dev/vda FYXOS_FS={fs} FYXOS_LUKS=0 FYXOS_FLAVOR={flavor} "
-           "FYXOS_USER=tester FYXOS_PASSWORD=tester FYXOS_HOSTNAME=fyxtest "
-           "FYXOS_TIMEZONE=UTC FYXOS_YES=1")
-vm.sendline(f"sudo {answers} fyxos-install; echo INSTALL_RC=$?")
+answers = (f"OMNIX_DISK=/dev/vda OMNIX_FS={fs} OMNIX_LUKS=0 OMNIX_FLAVOR={flavor} "
+           "OMNIX_USER=tester OMNIX_PASSWORD=tester OMNIX_HOSTNAME=omnixtest "
+           "OMNIX_TIMEZONE=UTC OMNIX_YES=1")
+vm.sendline(f"sudo {answers} omnix-install; echo INSTALL_RC=$?")
 vm.expect(r"INSTALL_RC=(\d+)", timeout=5400)
 rc = int(vm.match.group(1))
 if rc != 0:
-    sys.exit(f"fyxos-install failed: {rc}")
+    sys.exit(f"omnix-install failed: {rc}")
 
 # 2. Check the installed system from the installer.
 vm.sendline("sudo test -e /mnt/etc/nixos/flake.lock && "
-            "sudo grep -q github:FyxOS/FyxOS /mnt/etc/nixos/flake.nix && "
+            "sudo grep -q github:Omnix-Linux/Omnix /mnt/etc/nixos/flake.nix && "
             "sudo test -e /mnt/boot/EFI/BOOT/BOOTX64.EFI && echo LAYOUT_OK")
 vm.expect("LAYOUT_OK", timeout=60)
 vm.sendline("sync; sudo umount -R /mnt; sudo poweroff")

@@ -34,7 +34,7 @@ let
     ln -s ${pkgs.libxml2.out}/lib/libxml2.so $out/lib/libxml2.so.2
   '';
 
-  # FyxOS design §4.2. The module defaults are deliberately NOT restated, to test
+  # Omnix design §4.2. The module defaults are deliberately NOT restated, to test
   # whether the module merges them in.
   base = with pkgs; [
     stdenv.cc.cc.lib libffi libxcrypt elfutils libunwind

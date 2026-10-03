@@ -1,23 +1,23 @@
-# The FyxOS installer ISO: nixpkgs' stock minimal installer plus fyxos-install
+# The Omnix installer ISO: nixpkgs' stock minimal installer plus omnix-install
 # with its registry and templates (design §7).
 { config, lib, pkgs, modulesPath, nixpkgsRev, ... }:
 let
-  fyxos-install = pkgs.writeShellApplication {
-    name = "fyxos-install";
+  omnix-install = pkgs.writeShellApplication {
+    name = "omnix-install";
     runtimeInputs = with pkgs; [ gum jq disko curl util-linux pciutils networkmanager nixos-install-tools gnused coreutils ];
-    text = builtins.readFile ./fyxos-install.sh;
+    text = builtins.readFile ./omnix-install.sh;
   };
 in
 {
   imports = [ "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix" ];
 
-  environment.systemPackages = [ fyxos-install pkgs.gum pkgs.disko ];
+  environment.systemPackages = [ omnix-install pkgs.gum pkgs.disko ];
   environment.etc = {
-    "fyxos/flavors.json".source = ../flavors.json;
-    "fyxos/disk-layout.nix".source = ./disk-layout.nix;
-    "fyxos/flake.nix".source = ./flake.nix.template;
-    "fyxos/local.nix".source = ./local.nix.template;
-    "fyxos/nixpkgs-rev".text = nixpkgsRev;
+    "omnix/flavors.json".source = ../flavors.json;
+    "omnix/disk-layout.nix".source = ./disk-layout.nix;
+    "omnix/flake.nix".source = ./flake.nix.template;
+    "omnix/local.nix".source = ./local.nix.template;
+    "omnix/nixpkgs-rev".text = nixpkgsRev;
   };
 
   networking.networkmanager.enable = true;
@@ -26,9 +26,9 @@ in
   # A serial console too, so the installer can be driven headless (tests, servers).
   boot.kernelParams = [ "console=ttyS0,115200n8" "console=tty0" ];
 
-  image.baseName = lib.mkForce "fyxos";
-  isoImage.volumeID = lib.mkForce "FYXOS";
+  image.baseName = lib.mkForce "omnix";
+  isoImage.volumeID = lib.mkForce "OMNIX";
   services.getty.helpLine = lib.mkForce ''
-    Welcome to the FyxOS installer. Run: sudo fyxos-install
+    Welcome to the Omnix installer. Run: sudo omnix-install
   '';
 }

@@ -1,8 +1,8 @@
-# FyxOS
+# Omnix
 
 **NixOS with the standard Linux layout, and a choice of systems at install time.**
 
-FyxOS has two parts:
+Omnix has two parts:
 
 1. **A base:** NixOS (unstable) plus a small layer that gives it the standard library
    layout other distributions have. Prebuilt software then just runs: manylinux wheels,
@@ -11,7 +11,7 @@ FyxOS has two parts:
    installs the flavor you choose over the network, straight from `cache.nixos.org`.
 
 ```
-FyxOS installer
+Omnix installer
   ▸ What kind of system do you want?
       Atrium            polished windows, mouse-first KDE desktop
       Autarchy          Omarchy-style keyboard-driven Hyprland (stable or latest)
@@ -28,7 +28,7 @@ bash: ./some-vendor-tool: cannot execute: required file not found
 ```
 
 It needs `/lib64/ld-linux-x86-64.so.2`, `/usr/lib`, and `/usr/bin/python3`, which every
-other distribution provides. The FyxOS base adds them using tools nixpkgs already ships:
+other distribution provides. The Omnix base adds them using tools nixpkgs already ships:
 [nix-ld](https://github.com/nix-community/nix-ld) and
 [envfs](https://github.com/Mic92/envfs). It never relocates the Nix store, so every
 package still comes from the official binary cache.
@@ -40,8 +40,8 @@ own repository:
 
 | Flavor | What it is |
 |---|---|
-| [Atrium](https://github.com/FyxOS/Atrium) | KDE Plasma desktop, polished windows, mouse-first |
-| [Autarchy](https://github.com/FyxOS/Autarchy) | A port of Omarchy, in *stable* (a pinned Omarchy release) and *latest* variants |
+| [Atrium](https://github.com/Omnix-Linux/Atrium) | KDE Plasma desktop, polished windows, mouse-first |
+| [Autarchy](https://github.com/Omnix-Linux/Autarchy) | A port of Omarchy, in *stable* (a pinned Omarchy release) and *latest* variants |
 | Minimal | The base alone |
 
 The installed system is a flake that **you** own. The flavor is just one input. You
@@ -58,13 +58,13 @@ previous one from the boot menu.
 ## Status
 
 **Preview.** Download the installer from
-[Releases](https://github.com/FyxOS/FyxOS/releases), boot it, and run
-`sudo fyxos-install`. To add the base to an existing NixOS (unstable) flake
+[Releases](https://github.com/Omnix-Linux/Omnix/releases), boot it, and run
+`sudo omnix-install`. To add the base to an existing NixOS (unstable) flake
 instead:
 
 ```nix
-inputs.fyxos = { url = "github:FyxOS/FyxOS"; inputs.nixpkgs.follows = "nixpkgs"; };
-# modules = [ fyxos.nixosModules.default ... ];
+inputs.omnix = { url = "github:Omnix-Linux/Omnix"; inputs.nixpkgs.follows = "nixpkgs"; };
+# modules = [ omnix.nixosModules.default ... ];
 ```
 
 `nix flake check` boots the base in a VM and runs downloaded binaries against
@@ -74,6 +74,6 @@ See [design](docs/design.md), [prior art](docs/prior-art.md),
 
 ## Relationship to NixOS
 
-FyxOS is independent and not affiliated with or endorsed by the NixOS Foundation. It
+Omnix is independent and not affiliated with or endorsed by the NixOS Foundation. It
 depends entirely on nixpkgs, NixOS, and the public `cache.nixos.org`. Small fixes that
 belong upstream go upstream.

@@ -1,4 +1,4 @@
-# FyxOS base: the standard Linux library layout on NixOS (docs/design.md §4).
+# Omnix base: the standard Linux library layout on NixOS (docs/design.md §4).
 #
 #   /lib64/ld-linux-x86-64.so.2  nix-ld's loader shim
 #   /usr/lib, /lib               the nix-ld library tree
@@ -10,10 +10,10 @@
 # symlink trees and text files (rule 1).
 { config, lib, pkgs, ... }:
 let
-  cfg = config.fyx.fhs;
+  cfg = config.omnix.fhs;
 
   # Sonames nixpkgs no longer ships under the name foreign binaries ask for.
-  legacySonameShims = pkgs.runCommand "fyx-legacy-soname-shims" { } ''
+  legacySonameShims = pkgs.runCommand "omnix-legacy-soname-shims" { } ''
     mkdir -p $out/lib
     # libxml2 moved to .so.16 in 2.15; prebuilt LLVM tools still ask for .so.2.
     ln -s ${pkgs.libxml2.out}/lib/libxml2.so $out/lib/libxml2.so.2
@@ -45,7 +45,7 @@ let
   '';
 in
 {
-  options.fyx.fhs = {
+  options.omnix.fhs = {
     enable = lib.mkEnableOption "the standard Linux library layout" // {
       default = true;
     };
@@ -76,7 +76,7 @@ in
 
     # Python's ctypes.util.find_library asks `/sbin/ldconfig -p`. The cache only
     # answers queries; no loader reads it (§4.3).
-    systemd.services.fyx-ldconfig = {
+    systemd.services.omnix-ldconfig = {
       description = "Rebuild /etc/ld.so.cache from /usr/lib";
       wantedBy = [ "multi-user.target" ];
       after = [ "systemd-tmpfiles-setup.service" ];

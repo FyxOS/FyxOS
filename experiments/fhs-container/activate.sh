@@ -4,7 +4,7 @@
 # corpus never changes a system path at run time.
 #
 #   stock    programs.nix-ld.enable = true, module defaults only
-#   base     FyxOS: base library set, /usr/lib + /lib, ldconfig, envfs
+#   base     Omnix: base library set, /usr/lib + /lib, ldconfig, envfs
 #   desktop  base + the desktop preset
 set -eu
 MODE=$1
@@ -14,7 +14,7 @@ ln -s "$(readlink -f "$L/ldso")" /lib64/ld-linux-x86-64.so.2
 ln -s "$(readlink -f "$L/sw")" /run/current-system/sw
 [ "$MODE" = stock ] && exit 0
 
-# FyxOS design §4.2: the standard library paths are the nix-ld tree.
+# Omnix design §4.2: the standard library paths are the nix-ld tree.
 ln -s /run/current-system/sw/share/nix-ld/lib /usr/lib
 ln -s /usr/lib /lib
 
