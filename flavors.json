@@ -5,7 +5,7 @@
     "description": "KDE Plasma desktop: polished windows, mouse-first",
     "flake": "github:FyxOS/Atrium",
     "module": "default",
-    "status": "planned"
+    "status": "ready"
   },
   {
     "id": "autarchy-stable",
@@ -13,7 +13,7 @@
     "description": "Omarchy-style keyboard-driven Hyprland, pinned to an Omarchy release",
     "flake": "github:FyxOS/Autarchy",
     "module": "stable",
-    "status": "planned"
+    "status": "ready"
   },
   {
     "id": "autarchy-latest",
@@ -21,7 +21,7 @@
     "description": "Omarchy-style keyboard-driven Hyprland, tracking Omarchy main",
     "flake": "github:FyxOS/Autarchy",
     "module": "latest",
-    "status": "planned"
+    "status": "ready"
   },
   {
     "id": "minimal",

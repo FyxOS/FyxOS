@@ -1,5 +1,5 @@
-# The FyxOS installer ISO: nixpkgs' stock minimal installer, the FyxOS base,
-# and fyxos-install with its registry and templates (design §7).
+# The FyxOS installer ISO: nixpkgs' stock minimal installer plus fyxos-install
+# with its registry and templates (design §7).
 { config, lib, pkgs, modulesPath, nixpkgsRev, ... }:
 let
   fyxos-install = pkgs.writeShellApplication {

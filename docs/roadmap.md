@@ -17,11 +17,27 @@ in the [design](design.md). Then run this corpus of foreign binaries unmodified:
 
 **Exit:** the corpus runs, and the closure has nothing to build.
 
-Progress: the container half is done in
-[`experiments/fhs-container`](../experiments/fhs-container/). Everything except
-the store-loader gap passes on the base and desktop modes. What remains needs a
-booted NixOS VM: real envfs (FUSE) and activation of the `/usr/lib` and `/lib`
-links.
+Done. The container half is
+[`experiments/fhs-container`](../experiments/fhs-container/). The booted-VM half
+is `tests/fhs.nix` (`nix flake check`), which covers real envfs, activation, and a
+systemd service without nix-ld variables. Found upstream:
+
+- envfs did not resolve names on `readlink`, so relocatable interpreters
+  (python-build-standalone) cannot run through `#!/usr/bin/python3`
+  ([Mic92/envfs#233](https://github.com/Mic92/envfs/pull/233)).
+- envfs on the live ISO breaks NetworkManager DNS
+  ([#1](https://github.com/FyxOS/FyxOS/issues/1)); the ISO no longer includes
+  the FHS layer.
+
+## Status (2026-10-03)
+
+| Phase | State |
+|---|---|
+| 1. Base module | Done: `modules/fhs.nix`, VM-tested |
+| 2. Atrium | First version, VM-tested ([FyxOS/Atrium](https://github.com/FyxOS/Atrium)) |
+| 3. Installer | Done. `nix build .#iso` (1.5 GB); `tests/install-qemu.py` installs Minimal on btrfs over UEFI unattended and boots it |
+| 4. Autarchy | `stable` and `latest` VM-tested ([FyxOS/Autarchy](https://github.com/FyxOS/Autarchy)) |
+| 5. Switchover | Started by the maintainer |
 
 ## Phase 1: the base
 

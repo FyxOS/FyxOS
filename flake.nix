@@ -20,10 +20,10 @@
       nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
         inherit system;
         specialArgs.nixpkgsRev = nixpkgs.rev;
-        modules = [
-          self.nixosModules.default
-          ./installer/iso.nix
-        ];
+        # The installer runs only NixOS tools, so it is the stock installer
+        # without the FHS layer; the installed system gets it from its flake.
+        # (envfs on the live ISO also breaks NetworkManager's DNS: FyxOS#1.)
+        modules = [ ./installer/iso.nix ];
       };
       packages.${system}.iso = self.nixosConfigurations.installer.config.system.build.isoImage;
     };

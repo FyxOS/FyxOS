@@ -29,8 +29,11 @@ choose() { # var, header, options...
 [ "$(id -u)" = 0 ] || die "run as root (sudo fyxos-install)"
 gum style --border rounded --padding "0 2" --bold "FyxOS installer"
 
-# 1. Network: everything after this downloads from cache.nixos.org.
-until curl -fsS --max-time 5 -o /dev/null https://cache.nixos.org/nix-cache-info; do
+# 1. Network: everything after this downloads from cache.nixos.org. Give a
+# wired link up to a minute for DHCP before asking.
+online() { curl -fsS --max-time 5 -o /dev/null https://cache.nixos.org/nix-cache-info; }
+for _ in $(seq 30); do online && break; sleep 2; done
+until online; do
   [ -n "${FYXOS_YES:-}" ] && die "no network"
   gum confirm "No network. Open nmtui to connect?" || die "a network is required"
   nmtui
@@ -52,8 +55,10 @@ EFI=false; [ -d /sys/firmware/efi ] && EFI=true
 # 3. Flavor: the live registry, so a new flavor needs no new ISO; the ISO's
 # own copy if GitHub is unreachable. Only ready entries are offered.
 REGISTRY=/tmp/fyxos-flavors.json
-curl -fsS --max-time 10 -o $REGISTRY https://raw.githubusercontent.com/FyxOS/FyxOS/main/flavors.json \
-  && jq -e 'type == "array"' $REGISTRY >/dev/null || cp $ETC/flavors.json $REGISTRY
+if ! curl -fsS --max-time 10 -o $REGISTRY https://raw.githubusercontent.com/FyxOS/FyxOS/main/flavors.json \
+  || ! jq -e 'type == "array"' $REGISTRY >/dev/null; then
+  cp $ETC/flavors.json $REGISTRY
+fi
 mapfile -t flavors < <(jq -r '.[] | select(.status == "ready") | "\(.id)\t\(.name) — \(.description)"' $REGISTRY)
 [ ${#flavors[@]} -gt 0 ] || die "the flavor registry has no ready flavors"
 if [ -z "${FYXOS_FLAVOR:-}" ]; then
